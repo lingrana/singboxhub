@@ -1,0 +1,155 @@
+{{define "page_nodes"}}
+<div class="page">
+  <div class="head">
+    <h2>主机</h2>
+    <button class="primary" type="button"
+            hx-get="/admin/nodes/manage" hx-target="body" hx-swap="beforeend">管理主机</button>
+  </div>
+  <p class="muted">主机 = 部署在各服务器上的 sing-box 实例(通过其 Clash API 采集监控);出站代理在「订阅」页管理。</p>
+  <div id="node-form-slot"></div>
+  <div id="node-list"
+       hx-get="/admin/nodes/list" hx-trigger="every 5s, refresh-nodes from:body" hx-swap="innerHTML">
+    {{template "frag_node_list" .}}
+  </div>
+</div>
+{{end}}
+
+{{define "frag_node_list"}}
+<div class="cards">
+  {{range .Nodes}}
+  <div class="card node-card{{if not .Enabled}} off{{end}}">
+    <div class="row">
+      <span class="badge {{if .Online}}ok{{else}}bad{{end}}">{{if .Online}}在线{{else}}离线{{end}}</span>
+      <b class="name">{{.Name}}</b>
+      {{if not .Enabled}}<span class="badge gray">已停用</span>{{end}}
+    </div>
+    {{if .Tags}}
+    <div class="tags">
+      {{range .Tags}}<span class="tag">{{.}}</span>{{end}}
+    </div>
+    {{end}}
+    <div class="metrics mono">
+      <span>↑ {{fmtBps .UpBPS}}</span>
+      <span>↓ {{fmtBps .DownBPS}}</span>
+      <span>{{.ActiveConnections}} 连接</span>
+    </div>
+    <div class="muted">最近在线:{{fmtAgo .LastOnlineAt}}{{if .HasOutbound}} · 已配出站{{end}}</div>
+    <div class="actions">
+      <button type="button" hx-post="/admin/nodes/{{.ID}}/check">检查</button>
+      <button type="button" hx-get="/admin/nodes/{{.ID}}/edit" hx-target="#node-form-slot" hx-swap="innerHTML">编辑</button>
+      <button type="button" hx-post="/admin/nodes/{{.ID}}/toggle" hx-vals='{"enable":"{{if .Enabled}}false{{else}}true{{end}}"}'>{{if .Enabled}}停用{{else}}启用{{end}}</button>
+    </div>
+  </div>
+  {{end}}
+  {{if not .Nodes}}
+  <p class="muted">暂无主机。点击右上角「管理主机」,填入各 sing-box 的 Clash API 地址与 secret。</p>
+  {{end}}
+</div>
+{{end}}
+
+{{define "frag_node_form"}}
+<div class="modal-mask" id="node-modal">
+  <div class="modal card">
+    <div class="row-head">
+      <h3>{{if eq .Mode "edit"}}编辑主机{{else}}添加主机{{end}}</h3>
+      <button type="button" class="nav-btn ui-close-modal">✕</button>
+    </div>
+    {{if .FormError}}<p class="error mono">{{.FormError}}</p>{{end}}
+    {{if eq .Mode "edit"}}
+    <form hx-post="/admin/nodes/{{.NodeID}}/edit" hx-target="#node-form-slot" hx-swap="innerHTML">
+      <label>名称 *</label>
+      <input name="name" value="{{.Name}}" required maxlength="64">
+      {{if fieldErr .FieldErrors "name"}}<p class="mono muted">✕ {{fieldErr .FieldErrors "name"}}</p>{{end}}
+      <label>Clash API 地址(留空不修改)</label>
+      <input name="api_url" placeholder="保持不变请留空" value="">
+      <label>API Secret(留空不修改{{if .APISecretSet}},已设置{{end}})</label>
+      <input name="api_secret" type="password" placeholder="保持不变请留空" value="">
+      {{if fieldErr .FieldErrors "api_url"}}<p class="mono muted">✕ {{fieldErr .FieldErrors "api_url"}}</p>{{end}}
+      {{if fieldErr .FieldErrors "api_secret"}}<p class="mono muted">✕ {{fieldErr .FieldErrors "api_secret"}}</p>{{end}}
+      <label>加密配置地址(可选;KCE1 密文或明文 Clash YAML,自动识别导入全部代理)</label>
+      <input name="config_url" placeholder="http://1.2.3.4:8080/katabump" value="">
+      {{if fieldErr .FieldErrors "config_url"}}<p class="mono muted">✕ {{fieldErr .FieldErrors "config_url"}}</p>{{end}}
+      <label>解密密钥(KCE1,配合加密配置地址)</label>
+      <input name="kce_key" type="password" placeholder="CLASH_CONFIG_KEY" value="">
+      {{if fieldErr .FieldErrors "kce_key"}}<p class="mono muted">✕ {{fieldErr .FieldErrors "kce_key"}}</p>{{end}}
+      <label>出站配置 JSON(可选;用于出口 IP 探测与订阅导出)</label>
+      <textarea name="outbound_json" rows="5" class="mono"
+                placeholder='留空且填写加密配置地址时,自动取解密结果的第 1 个代理'>{{.OutboundJSON}}</textarea>
+      {{if fieldErr .FieldErrors "outbound_json"}}<p class="mono muted">✕ {{fieldErr .FieldErrors "outbound_json"}}</p>{{end}}
+      <label>标签(逗号分隔)</label>
+      <input name="tags" value="{{.Tags}}" placeholder="prod, jp">
+      <label class="chk"><input type="checkbox" name="enabled" {{if .Enabled}}checked{{end}}> 启用监控与采集</label>
+      <div class="form-actions">
+        <button type="submit" class="primary">保存</button>
+        <button type="button" class="ui-close-modal">取消</button>
+      </div>
+    </form>
+    {{else}}
+    <form hx-post="/admin/nodes/new" hx-target="#node-form-slot" hx-swap="innerHTML">
+      <label>名称 *</label>
+      <input name="name" value="{{.Name}}" placeholder="如 jp-vps" required maxlength="64">
+      {{if fieldErr .FieldErrors "name"}}<p class="mono muted">✕ {{fieldErr .FieldErrors "name"}}</p>{{end}}
+      <label>Clash API 地址 *</label>
+      <input name="api_url" placeholder="http://1.2.3.4:9090" value="{{.APIURL}}" required>
+      {{if fieldErr .FieldErrors "api_url"}}<p class="mono muted">✕ {{fieldErr .FieldErrors "api_url"}}</p>{{end}}
+      <label>API Secret *</label>
+      <input name="api_secret" type="password" placeholder="experimental.clash_api.secret" required>
+      {{if fieldErr .FieldErrors "api_secret"}}<p class="mono muted">✕ {{fieldErr .FieldErrors "api_secret"}}</p>{{end}}
+      <label>加密配置地址(可选;KCE1 密文或明文 Clash YAML,自动识别导入全部代理)</label>
+      <input name="config_url" placeholder="http://1.2.3.4:8080/katabump" value="{{.ConfigURL}}">
+      {{if fieldErr .FieldErrors "config_url"}}<p class="mono muted">✕ {{fieldErr .FieldErrors "config_url"}}</p>{{end}}
+      <label>解密密钥(KCE1,配合加密配置地址)</label>
+      <input name="kce_key" type="password" placeholder="CLASH_CONFIG_KEY" value="">
+      {{if fieldErr .FieldErrors "kce_key"}}<p class="mono muted">✕ {{fieldErr .FieldErrors "kce_key"}}</p>{{end}}
+      <label>出站配置 JSON(可选;用于出口 IP 探测与订阅导出)</label>
+      <textarea name="outbound_json" rows="5" class="mono"
+                placeholder='留空且填写加密配置地址时,自动取解密结果的第 1 个代理'>{{.OutboundJSON}}</textarea>
+      {{if fieldErr .FieldErrors "outbound_json"}}<p class="mono muted">✕ {{fieldErr .FieldErrors "outbound_json"}}</p>{{end}}
+      <label>标签(逗号分隔)</label>
+      <input name="tags" value="{{.Tags}}" placeholder="prod, jp">
+      <label class="chk"><input type="checkbox" name="enabled" {{if .Enabled}}checked{{end}}> 启用监控与采集</label>
+      <div class="form-actions">
+        <button type="submit" class="primary">保存</button>
+        <button type="button" class="ui-close-modal">取消</button>
+      </div>
+    </form>
+    {{end}}
+  </div>
+</div>
+{{end}}
+
+{{define "frag_node_manage"}}
+<div class="modal-mask" data-click="close-mask">
+  <div class="modal card" style="max-width:480px">
+    <div class="row-head">
+      <h3>管理主机</h3>
+      <button type="button" class="nav-btn ui-close-modal">✕</button>
+    </div>
+    <div style="margin-bottom:12px">
+      <button class="primary" type="button" id="btn-add-from-manage">+ 添加主机</button>
+    </div>
+    {{if .Nodes}}
+    <table>
+      <thead>
+        <tr><th>主机</th><th>状态</th><th>操作</th></tr>
+      </thead>
+      <tbody>
+        {{range .Nodes}}
+        <tr>
+          <td>{{.Name}}</td>
+          <td class="muted">{{if .Enabled}}{{if .Online}}在线{{else}}离线{{end}}{{else}}停用{{end}}</td>
+          <td>
+            <button type="button" class="danger" hx-post="/admin/nodes/{{.ID}}/delete"
+                    hx-confirm="确定删除主机「{{.Name}}」?其统计数据与自动导入的代理将一并删除。"
+                    hx-target="closest tr" hx-swap="outerHTML swap:1s">删除</button>
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+    {{else}}
+    <p class="muted">暂无主机。</p>
+    {{end}}
+  </div>
+</div>
+{{end}}

@@ -1,0 +1,40 @@
+# 构建产物
+*.exe
+/panel
+/mockclash
+/backend/panel
+/backend/mockclash
+
+# 运行时数据(数据库、密钥、初始密码)
+data/
+backend/data/
+backend/smoketest/
+*.db
+*.db-wal
+*.db-shm
+secret.key
+jwt.key
+initial-admin-password.txt
+
+# 本地配置与凭据
+.env
+.env.*
+*.local.yaml
+*.local.yml
+*.pem
+*.crt
+*.p12
+*.pfx
+
+# 本地工具、缓存与审查产物
+.DS_Store
+*.log
+.claude/
+.tmp-go-cache/
+.zcode/
+backend/.bug-review-*/
+backend/cmd/resetpw.go
+docs/review-*.md
+docs/bug-review-*/
+docs/bugfix-*.md
+AGENTS.md

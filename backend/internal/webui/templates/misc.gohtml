@@ -1,0 +1,535 @@
+{{define "page_traffic"}}
+<div class="page">
+  <div class="head">
+    <h2>用量</h2>
+  </div>
+
+  <div id="traffic-table"
+       hx-get="/admin/traffic/table" hx-trigger="every 5s" hx-swap="innerHTML">
+    {{template "frag_traffic_table" .}}
+  </div>
+</div>
+{{end}}
+
+{{define "frag_traffic_table"}}
+<div class="card">
+  {{if .Nodes}}
+  <table>
+    <thead>
+      <tr>
+        <th>节点</th>
+        <th>状态</th>
+        <th>实时 ↑</th>
+        <th>实时 ↓</th>
+        <th>今日 ↑</th>
+        <th>今日 ↓</th>
+        <th>总 ↑</th>
+        <th>总 ↓</th>
+        <th>连接</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range .Nodes}}
+      <tr>
+        <td>{{.Name}}</td>
+        <td>{{if .Enabled}}{{if .Online}}在线{{else}}离线{{end}}{{else}}停用{{end}}</td>
+        <td>{{fmtBps .UpBPS}}</td>
+        <td>{{fmtBps .DownBPS}}</td>
+        <td>{{fmtBytes .TodayUpBytes}}</td>
+        <td>{{fmtBytes .TodayDownBytes}}</td>
+        <td>{{fmtBytes .TotalUpBytes}}</td>
+        <td>{{fmtBytes .TotalDownBytes}}</td>
+        <td>{{.ActiveConnections}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+    <tfoot>
+      <tr style="font-weight:700;border-top:2px solid var(--border)">
+        <td>合计</td>
+        <td></td>
+        <td>{{fmtBps .TotalUpBPS}}</td>
+        <td>{{fmtBps .TotalDownBPS}}</td>
+        <td>{{fmtBytes .TotalTodayUp}}</td>
+        <td>{{fmtBytes .TotalTodayDown}}</td>
+        <td>{{fmtBytes .TotalAllUp}}</td>
+        <td>{{fmtBytes .TotalAllDown}}</td>
+        <td>{{.TotalConns}}</td>
+      </tr>
+    </tfoot>
+  </table>
+  {{else}}
+  <p class="muted">暂无节点。</p>
+  {{end}}
+</div>
+{{end}}
+
+
+
+{{define "frag_ips_table"}}
+<div>
+  {{if .Rows}}
+  <table>
+    <thead>
+      <tr>
+        <th>来源 IP</th>
+        <th>归属地</th>
+        {{if .PerNode}}<th>上行</th><th>下行</th>{{end}}
+        <th>总流量</th>
+        {{if .PerNode}}<th>连接数</th><th>最近活跃</th>{{else}}<th>节点数</th>{{end}}
+      </tr>
+    </thead>
+    <tbody>
+      {{range .Rows}}
+      <tr>
+        <td class="mono">{{.SourceIP}}</td>
+        <td class="muted">{{geoLine .Geo}}</td>
+        {{if $.PerNode}}<td>{{fmtBytes .UploadBytes}}</td><td>{{fmtBytes .DownloadBytes}}</td>{{end}}
+        <td><b>{{fmtBytes .TotalBytes}}</b></td>
+        {{if $.PerNode}}<td>{{.ConnectionsTotal}}</td><td class="muted">{{fmtAgo .LastSeenAt}}</td>{{else}}<td>{{.NodesCount}}</td>{{end}}
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+  {{if gt .TotalPages 1}}
+  <div class="pagination">
+    {{if gt .Page 1}}<button type="button" hx-get="/admin/ips?node={{if $.PerNode}}{{$.NodeID}}{{else}}all{{end}}&q={{$.Query}}&page={{sub .Page 1}}" hx-target="#main-content" hx-swap="innerHTML" hx-push-url="true">上一页</button>{{end}}
+    <span class="muted">第 {{.Page}} / {{.TotalPages}} 页</span>
+    {{if lt .Page .TotalPages}}<button type="button" hx-get="/admin/ips?node={{if $.PerNode}}{{$.NodeID}}{{else}}all{{end}}&q={{$.Query}}&page={{add .Page 1}}" hx-target="#main-content" hx-swap="innerHTML" hx-push-url="true">下一页</button>{{end}}
+  </div>
+  {{end}}
+  {{else}}
+  <p class="muted">暂无数据</p>
+  {{end}}
+</div>
+{{end}}
+
+{{define "page_subscription"}}
+<div class="page">
+  <div class="head">
+    <h2>订阅</h2>
+    <div class="fmt" id="sub-filter">
+      <button type="button" class="active" data-group="rule">Rule</button>
+      <button type="button" data-group="global">Global</button>
+      <button type="button" data-group="direct">Direct</button>
+    </div>
+  </div>
+  <div id="sub-nodes"
+       hx-get="/admin/subscription/nodes" hx-trigger="every 10s, refresh-nodes from:body" hx-swap="innerHTML">
+    {{template "frag_sub_nodes" .Nodes}}
+  </div>
+</div>
+<script>
+document.getElementById('sub-filter').addEventListener('click', function(e) {
+  var btn = e.target.closest('button');
+  if (!btn) return;
+  this.querySelectorAll('button').forEach(function(b) { b.classList.remove('active'); });
+  btn.classList.add('active');
+  var group = btn.dataset.group;
+  document.querySelectorAll('#sub-nodes tbody tr').forEach(function(row) {
+    var tag = row.querySelector('.tag');
+    row.style.display = (tag && tag.textContent.toLowerCase() === group) ? '' : 'none';
+  });
+});
+document.querySelector('#sub-filter button.active').click();
+</script>
+{{end}}
+
+{{define "frag_sub_card"}}
+{{if .Sub.Enabled}}
+<div class="card">
+  <div class="row-head">
+    <h3>订阅链接</h3>
+    <div class="fmt">
+      {{range listOf "singbox" "clash" "base64"}}
+      <button type="button" {{if eq $.Format .}}class="active" {{end}}
+              hx-get="/admin/subscription/card?format={{.}}" hx-target="#sub-card" hx-swap="innerHTML">{{.}}</button>
+      {{end}}
+    </div>
+  </div>
+  {{if .URL}}
+  <div class="url-row">
+    <input id="sub-url" class="mono" readonly value="{{.URL}}">
+    <button type="button" class="primary" data-copy="#sub-url">复制</button>
+  </div>
+  <div class="qr-row">
+    {{if .QRDataURI}}<img src="/admin/subscription/qrcode?format={{.Format}}" alt="订阅二维码" width="220" height="220">{{end}}
+    <div class="tips muted">
+      <p>· sing-box:配置 → 新建 Profile → 类型「远程」粘贴链接</p>
+      <p>· Clash/mihomo:订阅管理 → 导入链接</p>
+      <p>· base64:通用分享链接(URI)列表,可被大多数客户端解析</p>
+    </div>
+  </div>
+  <div class="actions">
+    <button type="button" hx-post="/admin/subscription/token" hx-target="#sub-card" hx-swap="innerHTML"
+            hx-confirm="旧订阅链接将立即失效,已导入的客户端需要重新导入。继续?">轮换令牌</button>
+    <button type="button" class="danger" hx-post="/admin/subscription/revoke" hx-target="#sub-card" hx-swap="innerHTML"
+            hx-confirm="吊销后所有订阅链接立即失效。继续?">吊销订阅</button>
+  </div>
+  {{else}}
+  <p class="muted">订阅已启用但响应缺少令牌,请刷新页面重试。</p>
+  {{end}}
+</div>
+{{else}}
+<div class="card">
+  <p>订阅当前处于<b>吊销</b>状态,尚未生成令牌。</p>
+  <button type="button" class="primary" hx-post="/admin/subscription/token" hx-target="#sub-card" hx-swap="innerHTML">生成订阅令牌</button>
+</div>
+{{end}}
+{{end}}
+
+{{define "page_settings"}}
+<div class="page settings-page">
+  <div class="head">
+    <h2>系统设置</h2>
+  </div>
+  <div id="settings-card">
+    {{template "frag_settings_form" .}}
+  </div>
+</div>
+{{end}}
+
+{{define "frag_settings_form"}}
+<div class="settings-grid">
+  <div class="card">
+    {{if .Error}}<p class="error mono">{{.Error}}</p>{{end}}
+    {{if .Saved}}<p class="mono muted">✓ 设置已保存。</p>{{end}}
+    {{if .Settings}}
+    <form hx-post="/admin/settings" hx-target="#settings-card" hx-swap="innerHTML" class="settings-form">
+      <input type="hidden" name="etag" value="{{.ETag}}">
+
+      <div class="form-group">
+        <label>来源 IP 采样间隔(秒,2-60)</label>
+        <input name="sampler_interval_seconds" type="number" min="2" max="60" value="{{.Settings.SamplerIntervalSeconds}}">
+        {{if fieldErr .FieldErr "sampler_interval_seconds"}}<p class="mono muted">✕ {{fieldErr .FieldErr "sampler_interval_seconds"}}</p>{{end}}
+        <p class="form-hint">越小越精确,但增加面板与节点负担。短于采样间隔的连接可能漏计。</p>
+      </div>
+
+      <div class="form-group">
+        <label>sing-box 二进制路径(出口 IP 探测用,可选)</label>
+        <input name="singbox_bin_path" class="mono" value="{{.Settings.SingboxBinPath}}" placeholder="/usr/local/bin/sing-box">
+        {{if fieldErr .FieldErr "singbox_bin_path"}}<p class="mono muted">✕ {{fieldErr .FieldErr "singbox_bin_path"}}</p>{{end}}
+      </div>
+
+      <div class="form-group">
+        <label>订阅重置冷却时间(分钟,0-1440)</label>
+        <input name="reset_cooldown_minutes" type="number" min="0" max="1440" value="{{.Settings.ResetCooldownMinutes}}">
+        {{if fieldErr .FieldErr "reset_cooldown_minutes"}}<p class="mono muted">✕ {{fieldErr .FieldErr "reset_cooldown_minutes"}}</p>{{end}}
+        <p class="form-hint">用户重置订阅链接后,需等待此时间才能再次重置。设为 0 则不限制。</p>
+      </div>
+
+      <div class="form-actions">
+        <button class="primary" type="submit">保存设置</button>
+      </div>
+    </form>
+    {{else}}
+    <p class="muted">设置加载失败,请刷新重试。</p>
+    {{end}}
+  </div>
+
+  <div class="card">
+    <h3>品牌设置</h3>
+    <form id="brand-form" hx-post="/admin/branding" hx-target="#settings-card" hx-swap="innerHTML" class="settings-form" onsubmit="return false">
+      <input type="hidden" name="etag" value="{{.ETag}}">
+      <div class="form-group">
+        <label>品牌名称</label>
+        <input name="brand_name" id="brand-name-input" value="{{.Settings.BrandName}}" placeholder="sing-box hub">
+      </div>
+      <div class="brand-grid">
+        <label class="brand-box" for="favicon-input">
+          {{if .Settings.FaviconURL}}
+          <img src="{{.Settings.FaviconURL}}" alt="favicon">
+          {{else}}
+          <span class="brand-placeholder">Favicon</span>
+          {{end}}
+          <input type="file" id="favicon-input" accept="image/png,image/jpeg,image/gif" class="sr-only">
+        </label>
+        <label class="brand-box" for="logo-input">
+          {{if .Settings.LogoURL}}
+          <img src="{{.Settings.LogoURL}}" alt="logo">
+          {{else}}
+          <span class="brand-placeholder">Logo</span>
+          {{end}}
+          <input type="file" id="logo-input" accept="image/png,image/jpeg,image/gif" class="sr-only">
+        </label>
+      </div>
+      <div class="form-actions">
+        <button class="primary" type="button" id="btn-save-brand">保存</button>
+      </div>
+    </form>
+  </div>
+</div>
+{{end}}
+
+{{define "page_users_ip"}}
+<div class="page">
+  <div class="head">
+    <h2>用户</h2>
+    <div class="row">
+      <input type="search" placeholder="搜索用户名或 IP..." id="user-search"
+             name="q" value="{{.Query}}" hx-get="/admin/users" hx-include="#user-search" hx-trigger="keyup changed delay:300ms" hx-target="#main-content" hx-swap="innerHTML" hx-push-url="true">
+      <button class="primary" type="button" hx-get="/admin/users/new" hx-target="#user-form-slot" hx-swap="innerHTML">新建用户</button>
+    </div>
+  </div>
+  <div id="user-form-slot"></div>
+  <div id="user-list"
+       hx-get="/admin/users/list?q={{.Query}}&page={{.Page}}" hx-trigger="every 10s, refresh-users from:body" hx-swap="innerHTML">
+    {{template "frag_user_list" .}}
+  </div>
+</div>
+{{end}}
+
+{{define "frag_user_list"}}
+<div class="user-table-wrap">
+  {{if .Error}}<p class="error mono">{{.Error}}</p>{{end}}
+  {{if .MergedRows}}
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>用户名</th>
+        <th>来源 IP</th>
+        <th>归属地</th>
+        <th>今日流量</th>
+        <th>操作</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range .MergedRows}}
+      {{if .IsUser}}
+      <tr>
+        <td class="mono">{{.User.ID}}</td>
+        <td>{{.User.Username}}</td>
+        <td class="muted">—</td>
+        <td class="muted">—</td>
+        <td class="muted">—</td>
+        <td>
+          <button type="button" hx-post="/admin/users/{{.User.ID}}/reset" hx-swap="none" hx-confirm="确定重置「{{.User.Username}}」密码为 a123456 ?">重置密码</button>
+        </td>
+      </tr>
+      {{else}}
+      <tr>
+        <td class="muted">—</td>
+        <td class="muted">—</td>
+        <td class="mono">{{.SourceIP}}</td>
+        <td class="muted">{{geoLine .Geo}}</td>
+        <td><b>{{fmtBytes .TotalBytes}}</b></td>
+        <td class="muted">—</td>
+      </tr>
+      {{end}}
+      {{end}}
+    </tbody>
+  </table>
+  {{if gt .TotalPages 1}}
+  <div class="pagination">
+    {{if gt .Page 1}}<button type="button" hx-get="/admin/users?q={{$.Query}}&page={{sub .Page 1}}" hx-target="#main-content" hx-swap="innerHTML" hx-push-url="true">上一页</button>{{end}}
+    <span class="muted">第 {{.Page}} / {{.TotalPages}} 页</span>
+    {{if lt .Page .TotalPages}}<button type="button" hx-get="/admin/users?q={{$.Query}}&page={{add .Page 1}}" hx-target="#main-content" hx-swap="innerHTML" hx-push-url="true">下一页</button>{{end}}
+  </div>
+  {{end}}
+  {{else}}
+  <p class="muted">暂无数据。</p>
+  {{end}}
+</div>
+{{end}}
+
+{{define "frag_user_form"}}
+<div class="modal-mask user-modal-mask">
+  <div class="modal user-modal" role="dialog" aria-modal="true" aria-labelledby="user-form-title">
+    <h3 id="user-form-title">{{if .UserID}}修改密码{{else}}添加用户{{end}}</h3>
+    {{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}
+    <form hx-post="{{if .UserID}}/admin/users/{{.UserID}}/password{{else}}/admin/users/new{{end}}" hx-target="#user-form-slot" hx-swap="innerHTML">
+      <label for="user-name">用户名</label>
+      <input id="user-name" name="username" value="{{.Username}}" required maxlength="64" autocomplete="off" {{if .UserID}}readonly{{else}}autofocus{{end}}>
+      <label for="user-password">{{if .UserID}}新密码{{else}}密码{{end}}</label>
+      <input id="user-password" name="password" type="password" required minlength="6" maxlength="72" autocomplete="new-password" {{if .UserID}}autofocus{{end}}>
+      <div class="form-actions">
+        <button type="submit" class="primary">{{if .UserID}}保存密码{{else}}创建用户{{end}}</button>
+        <button type="button" class="ui-close-modal">取消</button>
+      </div>
+    </form>
+  </div>
+</div>
+{{end}}
+
+{{define "frag_user_profile"}}
+<div class="modal-mask user-modal-mask">
+  <div class="modal user-modal profile-modal" role="dialog" aria-modal="true" aria-labelledby="profile-title">
+    <div class="profile-header">
+      <span class="profile-avatar">{{slice .Username 0 1}}</span>
+      <div class="profile-info">
+        <h3 id="profile-title">{{.Username}}</h3>
+        <span class="profile-role mono">{{if .IsAdmin}}管理员{{else}}普通用户{{end}}</span>
+      </div>
+    </div>
+
+    <div class="profile-section">
+      <div class="profile-section-header">
+        <h4 class="profile-section-title">个人信息</h4>
+        <button type="button" class="profile-edit-btn" title="修改密码"
+                data-action="open-profile-edit">✎</button>
+      </div>
+      <div class="profile-field">
+        <span class="profile-label mono">用户名</span>
+        <span class="profile-value">{{.Username}}</span>
+      </div>
+      <div class="profile-field">
+        <span class="profile-label mono">角色</span>
+        <span class="profile-value">{{if .IsAdmin}}管理员{{else}}普通用户{{end}}</span>
+      </div>
+    </div>
+
+    <div class="profile-section" id="profile-sub-section">
+      <div class="profile-section-header">
+        <h4 class="profile-section-title">订阅管理</h4>
+        <button type="button" class="profile-manage-btn" title="管理订阅">⚙</button>
+      </div>
+      {{if .SubEnabled}}
+      <div class="profile-field">
+        <span class="profile-label mono">订阅状态</span>
+        <span class="profile-value"><span class="badge ok">已启用</span></span>
+      </div>
+      {{if .SubURL}}
+      <div class="profile-sub-url">
+        <input class="mono" readonly value="{{.SubURLMask}}" data-full-url="{{.SubURL}}">
+        <button type="button" class="primary" data-copy=".profile-sub-url input">复制</button>
+      </div>
+      <div class="profile-actions-row">
+        <button type="button" class="profile-action-btn"
+                hx-get="/user/profile/qr" hx-target="body" hx-swap="beforeend">显示二维码</button>
+        {{if .ResetCooldownRemaining}}
+        <button type="button" class="profile-action-btn primary" disabled
+                title="冷却中,还需 {{.ResetCooldownRemaining}}">重置链接 ({{.ResetCooldownRemaining}})</button>
+        {{else}}
+        <button type="button" class="profile-action-btn primary"
+                hx-get="/user/profile/reset-confirm" hx-target="body" hx-swap="beforeend">重置链接</button>
+        {{end}}
+      </div>
+      {{else}}
+      <p class="muted">订阅已启用但响应缺少令牌,请刷新页面重试。</p>
+      {{end}}
+      {{else}}
+      <div class="profile-field">
+        <span class="profile-label mono">订阅状态</span>
+        <span class="profile-value"><span class="badge gray">未启用</span></span>
+      </div>
+      <button type="button" class="primary" hx-post="/user/subscription/token" hx-swap="none">生成订阅令牌</button>
+      {{end}}
+    </div>
+
+    <div class="form-actions">
+      <button type="button" class="ui-close-modal">关闭</button>
+    </div>
+  </div>
+</div>
+{{end}}
+
+{{define "frag_user_profile_edit"}}
+<div class="modal-mask user-modal-mask" id="profile-edit-modal">
+  <div class="modal user-modal" role="dialog" aria-modal="true">
+    <h3>编辑个人信息</h3>
+    {{if .Error}}<p class="error mono">{{.Error}}</p>{{end}}
+    <form hx-post="/user/profile/edit" hx-target="none" hx-swap="none">
+      <label for="profile-username">用户名</label>
+      <input id="profile-username" name="username" value="{{.Username}}" required maxlength="64" autocomplete="off">
+      <label for="profile-new-password">新密码 (留空则不修改)</label>
+      <input id="profile-new-password" name="new_password" type="password" minlength="6" maxlength="72" autocomplete="new-password">
+      <div class="form-actions">
+        <button type="submit" class="primary">保存</button>
+        <button type="button" class="ui-close-modal">取消</button>
+      </div>
+    </form>
+  </div>
+</div>
+{{end}}
+
+{{define "frag_user_profile_qr"}}
+<div class="modal-mask user-modal-mask">
+  <div class="modal user-modal profile-qr-modal" role="dialog" aria-modal="true">
+    <h3>订阅二维码</h3>
+    <div class="profile-qr">
+      <img src="/user/profile/qr/image" alt="订阅二维码" width="200" height="200">
+      <p class="muted">扫码导入订阅</p>
+    </div>
+    <div class="form-actions">
+      <button type="button" class="ui-close-modal">关闭</button>
+    </div>
+  </div>
+</div>
+{{end}}
+
+{{define "frag_user_profile_reset_confirm"}}
+<div class="modal-mask user-modal-mask">
+  <div class="modal user-modal profile-reset-modal" role="dialog" aria-modal="true">
+    <h3>重置订阅链接</h3>
+    <p class="muted">重置后旧链接将立即失效,已导入的客户端需要重新导入。</p>
+    <div class="profile-reset-warning">
+      <span>⚠</span>
+      <span>此操作不可撤销</span>
+    </div>
+    <div class="form-actions">
+      <button type="button" class="danger" hx-post="/user/subscription/token" hx-swap="none"
+              id="btn-confirm-reset">确认重置</button>
+      <button type="button" class="ui-close-modal">取消</button>
+    </div>
+  </div>
+</div>
+{{end}}
+
+{{define "frag_sub_nodes"}}
+<div class="user-table-wrap">
+  {{$labels := mkMap "rule" "规则" "global" "全局" "direct" "直连"}}
+  {{$total := add (len .Rule) (add (len .Global) (len .Direct))}}
+  {{if gt $total 0}}
+  <table>
+    <thead>
+      <tr>
+        <th>节点</th>
+        <th>分组</th>
+        <th>来源</th>
+        <th>操作</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range $key := listOf "rule" "global" "direct"}}
+      {{range index $.NodeGroups $key}}
+      <tr>
+        <td><b>{{.Name}}</b></td>
+        <td><span class="tag">{{index $labels $key}}</span></td>
+        <td>{{if .Source}}<span class="tag">导入</span>{{else}}<span class="muted">手动</span>{{end}}</td>
+        <td>
+          <button type="button" hx-post="/admin/nodes/{{.ID}}/latency" hx-swap="none">延迟测试</button>
+          <button type="button" hx-post="/admin/nodes/{{.ID}}/toggle" hx-vals='{"enable":"false"}'
+                  hx-confirm="停用后订阅立即不含该节点。">禁用</button>
+        </td>
+      </tr>
+      {{end}}
+      {{end}}
+    </tbody>
+  </table>
+  {{else}}
+  <p class="muted">暂无在线节点。</p>
+  {{end}}
+</div>
+{{end}}
+
+{{define "frag_sub_parsed"}}
+{{if .Error}}
+<p class="error mono">{{.Error}}</p>
+{{else if .Nodes}}
+<p class="muted">解析成功,共 {{len .Nodes}} 个节点:</p>
+<div class="cards">
+  {{range .Nodes}}
+  <div class="card">
+    <div class="row">
+      <b class="name">{{.Name}}</b>
+      <span class="tag">{{.Type}}</span>
+      {{if .Server}}<span class="mono muted">{{.Server}}:{{.Port}}</span>{{end}}
+    </div>
+    {{if .Remark}}<p class="muted" style="margin:4px 0 0;font-size:12px">{{.Remark}}</p>{{end}}
+  </div>
+  {{end}}
+</div>
+{{else}}
+<p class="muted">未解析到节点。</p>
+{{end}}
+{{end}}

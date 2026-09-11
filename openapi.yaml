@@ -1,0 +1,1625 @@
+openapi: "3.2.0"
+info:
+  title: sing-box hub
+  version: 1.3.0
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+  description: |
+    独立的多节点 sing-box 监控管理面板。
+
+    - **数据面**:复用每个 sing-box 节点内置的 Clash API(`experimental.clash_api`)采集
+      实时流量、连接(含客户端来源 IP)与内存信息;节点侧无需安装任何组件。
+    - **能力**:多节点注册与健康检查、流量历史(分钟/小时/天)、按来源 IP 的流量统计、
+      出口 IP 探测、基本控制(断开连接、切换节点选择、切换 mode)、订阅导出
+      (sing-box JSON / Clash YAML / base64 分享链接 URI 列表)。
+    - **约定**:错误一律 RFC 9457 Problem Details(`application/problem+json`);
+      列表游标分页(`cursor` + `page_size`,响应 `next_cursor` 与绝对 URI `links`);
+      时间 RFC 3339 UTC;字段 snake_case;数量字段带单位后缀(`_bytes`、`_bps`、`_ms`)。
+    - **订阅安全取舍**:`GET /sub/{token}` 为「能力 URL」(capability URL),令牌置于路径而非
+      Authorization 头,原因是订阅客户端 App 无法携带自定义请求头。缓解:令牌可随时轮换与吊销、
+      端点只读、有限流与访问日志、建议部署侧强制 HTTPS。
+    - **节点不可达**:面板到节点的 Clash API 请求失败统一返回 `502`,
+      `type: https://sing-hub.dev/probs/node-unreachable`。
+    - **加密配置导入**:节点可选 `config_url` + `kce_key`;添加/更新时面板自动拉取
+      (支持 KCE1 加密封装)并解析 Clash 代理,全部代理自动导入为面板节点;上游
+      拉取/解密失败统一返回 `502`,`type: https://sing-hub.dev/probs/upstream-unavailable`。
+    - **账号与会话**:所有面板账号均有管理权限。访问令牌绑定数据库中的会话;
+      删除账号、修改密码或用户名、登出会撤销相关会话。刷新令牌只能消费一次。
+      升级前的访问令牌需要刷新,有效的旧刷新令牌仍可换取新会话。
+    - **公开状态**:`/api/public/*` 无需登录,公开节点名称、标签、出口 IP、版本和运行统计,
+      不返回 API 地址、API secret、来源 IP 明细或出站配置。
+servers:
+  - url: http://localhost:9090
+    description: 本地开发默认地址
+tags:
+  - name: system
+    description: 健康检查与会话
+  - name: nodes
+    description: 节点注册与配置
+  - name: monitoring
+    description: 状态、流量与 IP 统计
+  - name: control
+    description: 对节点的运行时控制(透传 Clash API)
+  - name: subscription
+    description: 订阅导出
+  - name: subscriptions
+    description: 上游订阅源管理(KCE1 解密导入与聚合)
+  - name: settings
+    description: 面板设置
+  - name: users
+    description: 管理员账号
+security:
+  - bearerAuth: []
+paths:
+  /brand:
+    get:
+      operationId: getBrand
+      summary: 公开品牌信息(无鉴权,供状态页渲染)
+      tags: [settings]
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [brand_name]
+                properties:
+                  brand_name: { type: string }
+                  favicon_url: { type: string }
+                  logo_url: { type: string }
+  /health:
+    get:
+      operationId: getHealth
+      summary: 健康检查(公开,无鉴权)
+      tags: [system]
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: { type: string, enum: [ok] }
+              examples:
+                ok:
+                  value: { status: ok }
+  /session:
+    post:
+      operationId: createSession
+      summary: 登录,换取访问令牌与刷新令牌
+      tags: [system]
+      security: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema: { type: string }
+          description: 幂等键,防止重复登录提交;服务端去重窗口 24h
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LoginInput" }
+            examples:
+              valid:
+                value: { username: admin, password: "correct-horse" }
+      responses:
+        "201":
+          description: 已创建会话
+          headers:
+            Location:
+              schema: { type: string, format: uri-reference }
+              description: 指向 /me
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Session" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    delete:
+      operationId: deleteSession
+      summary: 登出,吊销当前用户的访问及刷新会话
+      tags: [system]
+      responses:
+        "204": { description: 已吊销 }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /session/refresh:
+    post:
+      operationId: refreshSession
+      summary: 用刷新令牌换取新会话
+      tags: [system]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token: { type: string }
+      responses:
+        "200":
+          description: 新会话
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Session" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /me:
+    get:
+      operationId: getMe
+      summary: 当前登录用户
+      tags: [system]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Me" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /nodes:
+    get:
+      operationId: listNodes
+      summary: 节点列表(游标分页,含实时摘要)
+      tags: [nodes]
+      parameters:
+        - { $ref: "#/components/parameters/cursor" }
+        - { $ref: "#/components/parameters/pageSize" }
+        - name: q
+          in: query
+          schema: { type: string }
+          description: 按名称模糊过滤
+        - name: tag
+          in: query
+          schema: { type: string }
+        - name: enabled
+          in: query
+          schema: { type: boolean }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NodeSummaryList" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      operationId: createNode
+      summary: 新增节点
+      tags: [nodes]
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema: { type: string }
+          description: 幂等键;同键重放返回首次创建结果,去重窗口 24h
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NodeInput" }
+            examples:
+              minimal:
+                value:
+                  name: home-sb
+                  api_url: http://192.168.1.10:9090
+                  api_secret: s3cret
+              full:
+                value:
+                  name: vps-jp
+                  api_url: https://sb.example.net:9090
+                  api_secret: s3cret
+                  tags: [prod, jp]
+                  enabled: true
+                  remark: Tokyo VPS
+      responses:
+        "201":
+          description: 已创建
+          headers:
+            Location:
+              schema: { type: string, format: uri-reference }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Node" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/InternalError" }
+  /nodes/{node_id}:
+    parameters:
+      - { $ref: "#/components/parameters/nodeId" }
+    get:
+      operationId: getNode
+      summary: 节点详情
+      tags: [nodes]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Node" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      operationId: updateNode
+      summary: 部分更新节点(application/merge-patch+json)
+      tags: [nodes]
+      requestBody:
+        required: true
+        content:
+          application/merge-patch+json:
+            schema: { $ref: "#/components/schemas/NodePatch" }
+            examples:
+              rename:
+                value: { name: vps-jp-2, remark: moved }
+              rotateSecret:
+                value: { api_secret: new-s3cret }
+      responses:
+        "200":
+          description: 已更新
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Node" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "412": { $ref: "#/components/responses/PreconditionFailed" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+    delete:
+      operationId: deleteNode
+      summary: 删除节点(连同其统计数据)
+      tags: [nodes]
+      responses:
+        "204": { description: 已删除 }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /nodes/{node_id}/check:
+    parameters:
+      - { $ref: "#/components/parameters/nodeId" }
+    post:
+      operationId: checkNode
+      summary: 立即对节点做一次连通性检查(Clash API /version)
+      description: 节点不可达不报错,而是返回 online=false;仅当节点不存在时 404。
+      tags: [nodes]
+      responses:
+        "200":
+          description: 检查结果
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NodeCheckResult" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/InternalError" }
+        "502": { $ref: "#/components/responses/NodeUnreachable" }
+  /nodes/{node_id}/latency:
+    parameters:
+      - { $ref: "#/components/parameters/nodeId" }
+    post:
+      operationId: probeNodeLatency
+      summary: 对节点出站做 TCP 连接延迟测试
+      description: |
+        对出站配置的 server:server_port 发起一次 TCP 连接并测量耗时;适用于
+        无 Clash API 的订阅导入节点。无出站配置返回 422,连接失败返回 200
+        且 ok=false(与 check 语义一致)。
+      tags: [nodes]
+      responses:
+        "200":
+          description: 测试结果
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [node_id, ok, checked_at]
+                properties:
+                  node_id: { type: string, format: uuid }
+                  ok: { type: boolean }
+                  latency_ms: { type: [integer, "null"] }
+                  detail: { type: string }
+                  checked_at: { type: string, format: date-time }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "500": { $ref: "#/components/responses/InternalError" }
+  /nodes/{node_id}/probe:
+    parameters:
+      - { $ref: "#/components/parameters/nodeId" }
+    post:
+      operationId: probeNodeExitIp
+      summary: 异步探测节点出口 IP(202 + operation)
+      description: |
+        通过本机 sing-box 二进制按节点出站配置发起探测请求,结果写入 exit-ip 并可经
+        `GET /operations/{operation_id}` 查询。节点未配置 outbound 时 422。
+      tags: [monitoring]
+      responses:
+        "202":
+          description: 已受理
+          headers:
+            Location:
+              schema: { type: string, format: uri-reference }
+              description: 指向 GET /operations/{operation_id}
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Operation" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /nodes/{node_id}/status:
+    parameters:
+      - { $ref: "#/components/parameters/nodeId" }
+    get:
+      operationId: getNodeStatus
+      summary: 节点实时状态(来自采集器内存快照)
+      tags: [monitoring]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NodeStatus" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /nodes/{node_id}/traffic:
+    parameters:
+      - { $ref: "#/components/parameters/nodeId" }
+    get:
+      operationId: listNodeTraffic
+      summary: 节点流量时间序列
+      tags: [monitoring]
+      parameters:
+        - name: interval
+          in: query
+          schema: { type: string, enum: [minute, hour, day], default: minute }
+        - { $ref: "#/components/parameters/timeFrom" }
+        - { $ref: "#/components/parameters/timeTo" }
+        - { $ref: "#/components/parameters/cursor" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TrafficSeries" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /nodes/{node_id}/ips:
+    parameters:
+      - { $ref: "#/components/parameters/nodeId" }
+    get:
+      operationId: listNodeIps
+      summary: 节点的客户端来源 IP 统计
+      description: 采样口径统计(best-effort),含 IP 归属地(若启用归属查询)。
+      tags: [monitoring]
+      parameters:
+        - { $ref: "#/components/parameters/cursor" }
+        - { $ref: "#/components/parameters/pageSize" }
+        - name: sort
+          in: query
+          schema: { type: string, enum: [total_bytes, -total_bytes, last_seen_at, -last_seen_at], default: -total_bytes }
+        - name: q
+          in: query
+          schema: { type: string }
+          description: 按 IP 前缀过滤
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IpStatList" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /nodes/{node_id}/connections:
+    parameters:
+      - { $ref: "#/components/parameters/nodeId" }
+    get:
+      operationId: listNodeConnections
+      summary: 节点当前活动连接(透传 Clash API 快照)
+      tags: [control]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConnectionList" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "502": { $ref: "#/components/responses/NodeUnreachable" }
+    delete:
+      operationId: closeAllNodeConnections
+      summary: 关闭节点全部活动连接
+      tags: [control]
+      responses:
+        "204": { description: 已关闭 }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "502": { $ref: "#/components/responses/NodeUnreachable" }
+  /nodes/{node_id}/connections/{connection_id}:
+    parameters:
+      - { $ref: "#/components/parameters/nodeId" }
+      - name: connection_id
+        in: path
+        required: true
+        schema: { type: string }
+    delete:
+      operationId: closeNodeConnection
+      summary: 关闭节点上的一条连接
+      tags: [control]
+      responses:
+        "204": { description: 已关闭 }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "502": { $ref: "#/components/responses/NodeUnreachable" }
+  /nodes/{node_id}/proxies:
+    parameters:
+      - { $ref: "#/components/parameters/nodeId" }
+    get:
+      operationId: listNodeProxies
+      summary: 节点代理与策略组(透传 Clash API)
+      tags: [control]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProxyList" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "502": { $ref: "#/components/responses/NodeUnreachable" }
+  /nodes/{node_id}/proxies/{proxy_name}:
+    parameters:
+      - { $ref: "#/components/parameters/nodeId" }
+      - name: proxy_name
+        in: path
+        required: true
+        schema: { type: string }
+    put:
+      operationId: selectNodeProxy
+      summary: 在策略组中选择出站(透传 Clash API)
+      tags: [control]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, description: 要选中的出站名称 }
+      responses:
+        "204": { description: 已切换 }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "502": { $ref: "#/components/responses/NodeUnreachable" }
+  /nodes/{node_id}/rules:
+    parameters:
+      - { $ref: "#/components/parameters/nodeId" }
+    get:
+      operationId: listNodeRules
+      summary: 节点路由规则(透传 Clash API)
+      tags: [control]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RuleList" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "502": { $ref: "#/components/responses/NodeUnreachable" }
+  /nodes/{node_id}/runtime:
+    parameters:
+      - { $ref: "#/components/parameters/nodeId" }
+    patch:
+      operationId: updateNodeRuntime
+      summary: 切换节点运行模式(透传 Clash API PATCH /configs)
+      tags: [control]
+      requestBody:
+        required: true
+        content:
+          application/merge-patch+json:
+            schema:
+              type: object
+              required: [mode]
+              properties:
+                mode: { type: string, enum: [rule, global, direct] }
+      responses:
+        "200":
+          description: 已切换
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NodeStatus" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "502": { $ref: "#/components/responses/NodeUnreachable" }
+  /nodes/{node_id}/exit-ip:
+    parameters:
+      - { $ref: "#/components/parameters/nodeId" }
+    get:
+      operationId: getNodeExitIp
+      summary: 节点最近一次出口 IP 探测结果
+      tags: [monitoring]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExitIp" }
+        "404":
+          description: 从未探测过(或节点不存在)
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+  /nodes/{node_id}/share-link:
+    parameters:
+      - { $ref: "#/components/parameters/nodeId" }
+    get:
+      operationId: getNodeShareLink
+      summary: 单节点分享链接(由出站配置生成)
+      tags: [subscription]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ShareLink" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422":
+          description: 节点未配置 outbound,无法生成
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+  /operations/{operation_id}:
+    parameters:
+      - name: operation_id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      operationId: getOperation
+      summary: 查询异步操作状态
+      tags: [monitoring]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Operation" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /subscription:
+    get:
+      operationId: getSubscription
+      summary: 查看订阅配置(令牌、URL、可用格式)
+      tags: [subscription]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SubscriptionInfo" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    delete:
+      operationId: deleteSubscription
+      summary: 吊销订阅令牌(订阅立即不可用)
+      tags: [subscription]
+      responses:
+        "204": { description: 已吊销 }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /subscription/token:
+    post:
+      operationId: resetSubscriptionToken
+      summary: 生成/轮换订阅令牌(吊销旧令牌并重新启用)
+      tags: [subscription]
+      responses:
+        "200":
+          description: 新订阅配置
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SubscriptionInfo" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /sub/{token}:
+    get:
+      operationId: getSubscriptionContent
+      summary: 订阅内容(公开能力 URL,令牌置于路径)
+      description: |
+        供客户端 App 直接导入的订阅端点,令牌在路径中(见 info.description 的安全取舍)。
+        无效令牌一律 404,不泄露存在性。
+      tags: [subscription]
+      security: []
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema: { type: string }
+        - name: format
+          in: query
+          schema: { type: string, enum: [singbox, clash, base64], default: singbox }
+      responses:
+        "200":
+          description: 订阅内容,Content-Type 随 format 变化
+          content:
+            application/json:
+              schema:
+                type: object
+                description: sing-box 客户端最小完整配置(log/dns/outbounds/route),outbounds 含全部可用节点与自动生成的 selector
+              examples:
+                singbox:
+                  value:
+                    log: { level: warn }
+                    outbounds:
+                      - { type: selector, tag: PROXY, outbounds: [vps-jp, home-sb] }
+                      - { type: vless, tag: vps-jp, server: sb.example.net, server_port: 443 }
+            text/yaml:
+              schema: { type: string }
+              examples:
+                clash:
+                  value: |
+                    proxies:
+                      - name: vps-jp
+                        type: vless
+                        server: sb.example.net
+                        port: 443
+            text/plain:
+              schema: { type: string }
+              examples:
+                base64:
+                  value: dmxlc3M6Ly8uLi4Kc3M6Ly8uLi4K
+        "404":
+          description: 令牌无效或已吊销
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /stats/overview:
+    get:
+      operationId: getStatsOverview
+      summary: 全局总览(在线节点、实时速率、今日流量、IP 数)
+      tags: [monitoring]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Overview" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /stats/traffic-series:
+    get:
+      operationId: getStatsTrafficSeries
+      summary: 全部节点聚合流量时间序列(总览图表,按时间升序)
+      tags: [monitoring]
+      parameters:
+        - name: interval
+          in: query
+          schema: { type: string, enum: [minute, hour, day], default: minute }
+        - { $ref: "#/components/parameters/timeFrom" }
+        - { $ref: "#/components/parameters/timeTo" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TrafficSeries" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /stats/top-nodes:
+    get:
+      operationId: listTopNodes
+      summary: 时间段内节点流量排行
+      tags: [monitoring]
+      parameters:
+        - { $ref: "#/components/parameters/timeFrom" }
+        - { $ref: "#/components/parameters/timeTo" }
+        - name: limit
+          in: query
+          schema: { type: integer, maximum: 100, default: 10 }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TopNodeList" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /stats/top-ips:
+    get:
+      operationId: listTopIps
+      summary: 时间段内来源 IP 流量排行(跨节点)
+      tags: [monitoring]
+      parameters:
+        - { $ref: "#/components/parameters/timeFrom" }
+        - { $ref: "#/components/parameters/timeTo" }
+        - name: limit
+          in: query
+          schema: { type: integer, maximum: 100, default: 10 }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TopIpList" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /settings:
+    get:
+      operationId: getSettings
+      summary: 读取面板设置(带 ETag)
+      tags: [settings]
+      responses:
+        "200":
+          description: OK
+          headers:
+            ETag:
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Settings" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    patch:
+      operationId: updateSettings
+      summary: 更新面板设置(强制 If-Match)
+      tags: [settings]
+      parameters:
+        - name: If-Match
+          in: header
+          required: true
+          schema: { type: string }
+          description: GET /settings 返回的 ETag
+      requestBody:
+        required: true
+        content:
+          application/merge-patch+json:
+            schema: { $ref: "#/components/schemas/SettingsPatch" }
+            examples:
+              tune:
+                value: { sampler_interval_seconds: 5, retention_days: 60 }
+      responses:
+        "200":
+          description: 已更新
+          headers:
+            ETag:
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Settings" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "412": { $ref: "#/components/responses/PreconditionFailed" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "428": { $ref: "#/components/responses/PreconditionRequired" }
+        "500": { $ref: "#/components/responses/InternalError" }
+  /users:
+    get:
+      operationId: listUsers
+      summary: 管理员账号列表(按 ID 游标分页)
+      tags: [users]
+      parameters:
+        - { $ref: "#/components/parameters/cursor" }
+        - name: page_size
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 100 }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UserList" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "500": { $ref: "#/components/responses/InternalError" }
+    post:
+      operationId: createUser
+      summary: 创建管理员账号
+      tags: [users]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UserInput" }
+      responses:
+        "201":
+          description: 已创建
+          headers:
+            Location: { schema: { type: string, format: uri-reference } }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "413": { $ref: "#/components/responses/ContentTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "500": { $ref: "#/components/responses/InternalError" }
+  /users/{user_id}:
+    parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema: { type: integer, minimum: 1 }
+    get:
+      operationId: getUser
+      summary: 读取管理员账号
+      tags: [users]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/InternalError" }
+    patch:
+      operationId: updateUser
+      summary: 原子修改用户名或密码,同时撤销该用户的全部会话
+      tags: [users]
+      requestBody:
+        required: true
+        content:
+          application/merge-patch+json:
+            schema: { $ref: "#/components/schemas/UserPatch" }
+          application/json:
+            schema: { $ref: "#/components/schemas/UserPatch" }
+      responses:
+        "200":
+          description: 已更新;空对象不修改账号或撤销会话
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "413": { $ref: "#/components/responses/ContentTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "500": { $ref: "#/components/responses/InternalError" }
+    delete:
+      operationId: deleteUser
+      summary: 删除账号及其会话;默认管理员(ID 1)不可删除
+      tags: [users]
+      responses:
+        "204": { description: 已删除 }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "500": { $ref: "#/components/responses/InternalError" }
+  /stats/nodes:
+    get:
+      operationId: getNodeDashboard
+      summary: 全节点仪表盘快照
+      tags: [monitoring]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, updated_at]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/NodeDashboardItem" }
+                  updated_at: { type: string, format: date-time }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "500": { $ref: "#/components/responses/InternalError" }
+  /api/public/stats:
+    get:
+      operationId: getPublicStats
+      summary: 公开状态汇总
+      tags: [monitoring]
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PublicStats" }
+        "500": { $ref: "#/components/responses/InternalError" }
+  /api/public/nodes:
+    get:
+      operationId: getPublicNodes
+      summary: 公开全节点状态快照
+      tags: [monitoring]
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/PublicNodeItem" }
+        "500": { $ref: "#/components/responses/InternalError" }
+  /settings/favicon:
+    get:
+      operationId: getFavicon
+      summary: 获取浏览器图标(公开,支持 HEAD、条件请求及 Range)
+      tags: [settings]
+      security: []
+      responses:
+        "200": { $ref: "#/components/responses/BrandingImage" }
+        "206": { $ref: "#/components/responses/BrandingImage" }
+        "304": { description: 图片未修改 }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "412": { $ref: "#/components/responses/PreconditionFailed" }
+        "416": { $ref: "#/components/responses/RangeNotSatisfiable" }
+        "500": { $ref: "#/components/responses/InternalError" }
+    post:
+      operationId: uploadFavicon
+      summary: 替换浏览器图标
+      tags: [settings]
+      requestBody: { $ref: "#/components/requestBodies/BrandingImage" }
+      responses:
+        "200": { $ref: "#/components/responses/BrandingSaved" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "413": { $ref: "#/components/responses/ContentTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "500": { $ref: "#/components/responses/InternalError" }
+  /settings/logo:
+    get:
+      operationId: getLogo
+      summary: 获取导航 Logo(公开,支持 HEAD、条件请求及 Range)
+      tags: [settings]
+      security: []
+      responses:
+        "200": { $ref: "#/components/responses/BrandingImage" }
+        "206": { $ref: "#/components/responses/BrandingImage" }
+        "304": { description: 图片未修改 }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "412": { $ref: "#/components/responses/PreconditionFailed" }
+        "416": { $ref: "#/components/responses/RangeNotSatisfiable" }
+        "500": { $ref: "#/components/responses/InternalError" }
+    post:
+      operationId: uploadLogo
+      summary: 替换导航 Logo
+      tags: [settings]
+      requestBody: { $ref: "#/components/requestBodies/BrandingImage" }
+      responses:
+        "200": { $ref: "#/components/responses/BrandingSaved" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "413": { $ref: "#/components/responses/ContentTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "500": { $ref: "#/components/responses/InternalError" }
+components:
+  requestBodies:
+    BrandingImage:
+      required: true
+      description: 原始 PNG/JPEG/GIF 图片,最大 2097152 字节,宽高均不超过 4096 像素
+      content:
+        image/png: { schema: { type: string, format: binary } }
+        image/jpeg: { schema: { type: string, format: binary } }
+        image/gif: { schema: { type: string, format: binary } }
+        application/octet-stream: { schema: { type: string, format: binary } }
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: 登录 /session 获取的访问令牌
+  parameters:
+    cursor:
+      name: cursor
+      in: query
+      schema: { type: string }
+      description: 分页游标,来自上一页 next_cursor
+    pageSize:
+      name: page_size
+      in: query
+      schema: { type: integer, maximum: 100, default: 20 }
+    nodeId:
+      name: node_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    timeFrom:
+      name: from
+      in: query
+      schema: { type: string, format: date-time }
+      description: 起始时间(RFC 3339 UTC)
+    timeTo:
+      name: to
+      in: query
+      schema: { type: string, format: date-time }
+      description: 结束时间(RFC 3339 UTC)
+  responses:
+    RangeNotSatisfiable:
+      description: Range 不可满足
+      headers:
+        Content-Range: { schema: { type: string } }
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    BadRequest:
+      description: 请求无法解析
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    ContentTooLarge:
+      description: 请求体超过大小限制
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    UnsupportedMediaType:
+      description: 不支持的请求媒体类型
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    InternalError:
+      description: 内部错误
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    BrandingImage:
+      description: 图片字节;Content-Type 与实际格式一致
+      headers:
+        ETag: { schema: { type: string } }
+        Accept-Ranges: { schema: { type: string } }
+      content:
+        image/png: { schema: { type: string, format: binary } }
+        image/jpeg: { schema: { type: string, format: binary } }
+        image/gif: { schema: { type: string, format: binary } }
+    BrandingSaved:
+      description: 已保存
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [status]
+            properties:
+              status: { type: string, const: ok }
+    Unauthorized:
+      description: 未认证
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    NotFound:
+      description: 资源不存在
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    Conflict:
+      description: 冲突(如节点重名)
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    ValidationError:
+      description: 语义校验失败
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    PreconditionFailed:
+      description: If-Match 不匹配
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    PreconditionRequired:
+      description: 缺少必填的 If-Match
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    RateLimited:
+      description: 请求过于频繁
+      headers:
+        Retry-After:
+          schema: { type: integer }
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    NodeUnreachable:
+      description: 面板无法访问节点 Clash API
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+  schemas:
+    User:
+      type: object
+      required: [id, username, created_at]
+      properties:
+        id: { type: integer, minimum: 1 }
+        username: { type: string }
+        created_at: { type: string, format: date-time }
+    UserList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/User" }
+        next_cursor: { type: [string, "null"] }
+    UserInput:
+      type: object
+      required: [username, password]
+      properties:
+        username: { type: string, minLength: 1, maxLength: 64 }
+        password:
+          type: string
+          minLength: 6
+          maxLength: 72
+          description: UTF-8 编码后不得超过 72 字节
+          writeOnly: true
+    UserPatch:
+      type: object
+      properties:
+        username: { type: [string, "null"], minLength: 1, maxLength: 64 }
+        password:
+          type: [string, "null"]
+          minLength: 6
+          maxLength: 72
+          description: UTF-8 编码后不得超过 72 字节;null 等同于省略
+          writeOnly: true
+    PublicStats:
+      type: object
+      required: [total_nodes, online_nodes, up_bps, down_bps, up_bytes_today, down_bytes_today]
+      properties:
+        total_nodes: { type: integer }
+        online_nodes: { type: integer }
+        up_bps: { type: integer }
+        down_bps: { type: integer }
+        up_bytes_today: { type: integer }
+        down_bytes_today: { type: integer }
+    NodeLiveSummary:
+      type: object
+      required: [id, name, tags, enabled, online, up_bps, down_bps, active_connections, today_up_bytes, today_down_bytes]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        tags: { type: array, items: { type: string } }
+        enabled: { type: boolean }
+        online: { type: boolean }
+        up_bps: { type: integer }
+        down_bps: { type: integer }
+        active_connections: { type: integer }
+        today_up_bytes: { type: integer }
+        today_down_bytes: { type: integer }
+        memory_bytes: { type: [integer, "null"] }
+        version: { type: [string, "null"] }
+        last_online_at: { type: [string, "null"], format: date-time }
+    NodeDashboardItem:
+      allOf:
+        - { $ref: "#/components/schemas/NodeLiveSummary" }
+        - type: object
+          required: [has_outbound]
+          properties:
+            has_outbound: { type: boolean }
+            mode: { type: [string, "null"] }
+    PublicNodeItem:
+      allOf:
+        - { $ref: "#/components/schemas/NodeLiveSummary" }
+        - type: object
+          required: [exit_ip]
+          properties:
+            exit_ip: { type: string }
+    Problem:
+      type: object
+      description: RFC 9457 Problem Details;type 为稳定绝对 URI,未知类型为 about:blank
+      required: [type, title, status]
+      properties:
+        type: { type: string, format: uri }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string, format: uri-reference }
+        errors:
+          type: array
+          description: 校验错误明细,pointer 为 RFC 6901 JSON Pointer
+          items:
+            type: object
+            required: [detail, pointer]
+            properties:
+              detail: { type: string }
+              pointer: { type: string }
+      examples:
+        - type: https://sing-hub.dev/probs/node-unreachable
+          title: Node unreachable
+          status: 502
+          detail: "dial tcp 192.168.1.10:9090: connect refused"
+          instance: /nodes/3fa85f64-5717-4562-b3fc-2c963f66afa6/connections
+    LoginInput:
+      type: object
+      required: [username, password]
+      properties:
+        username: { type: string, minLength: 1 }
+        password: { type: string, minLength: 1 }
+    Session:
+      type: object
+      required: [access_token, token_type, expires_in_seconds, refresh_token]
+      properties:
+        access_token: { type: string }
+        token_type: { type: string, enum: [Bearer] }
+        expires_in_seconds: { type: integer, description: 访问令牌有效期秒数 }
+        refresh_token: { type: string }
+    Me:
+      type: object
+      required: [username, created_at]
+      properties:
+        username: { type: string }
+        created_at: { type: string, format: date-time }
+    ImportStats:
+      type: object
+      required: [found, imported, updated, removed, skipped]
+      properties:
+        found: { type: integer, description: 本次解析到的代理数 }
+        imported: { type: integer, description: 新导入节点数 }
+        updated: { type: integer, description: 刷新出站的既有节点数 }
+        removed: { type: integer, description: 上游已消失而删除的节点数 }
+        skipped: { type: integer, description: 因类型不支持或字段缺失被跳过的代理数 }
+    Node:
+      type: object
+      required: [id, name, api_url, api_secret_set, tags, enabled, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        api_url: { type: string, format: uri }
+        api_secret_set:
+          type: boolean
+          description: 已配置密钥则为 true;密钥本身永不回读
+        outbound_json:
+          type: [string, "null"]
+          description: 节点出站配置(sing-box outbound JSON);列表接口不返回此字段
+        source:
+          type: string
+          description: 节点来源;''=手工添加,`sub:<id>`=由上游订阅源导入
+        config_url:
+          type: string
+          description: 加密配置地址(KCE1 密文或明文 Clash YAML);为空表示未配置解密导入
+        kce_key_set:
+          type: boolean
+          description: 已保存 KCE1 解密密钥则为 true;密钥本身永不回读
+        import:
+          description: 仅创建/更新且携带 config_url 时返回的解密导入统计
+          allOf:
+            - $ref: "#/components/schemas/ImportStats"
+        tags:
+          type: array
+          items: { type: string }
+        enabled: { type: boolean }
+        remark: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        last_online_at: { type: [string, "null"], format: date-time }
+    NodeInput:
+      type: object
+      required: [name, api_url, api_secret]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 64 }
+        api_url:
+          type: string
+          format: uri
+          description: 节点 Clash API 地址,如 http://10.0.0.2:9090
+        api_secret: { type: string, minLength: 1 }
+        outbound_json:
+          type: [string, "null"]
+          description: sing-box outbound JSON 对象文本;用于出口 IP 探测与订阅导出
+        config_url:
+          type: string
+          format: uri
+          description: >
+            可选;提供时拉取该地址(支持 KCE1 密文,需配合 kce_key)并解析
+            Clash 代理,出站未手动给出时取第 1 个代理的出站
+        kce_key:
+          type: string
+          maxLength: 256
+          description: 可选;config_url 返回 KCE1 密文时必需的解密密钥(保存后不回读)
+        tags:
+          type: array
+          items: { type: string }
+        enabled: { type: boolean, default: true }
+        remark: { type: string }
+    NodePatch:
+      type: object
+      description: merge-patch 语义;未提供的字段保持不变
+      properties:
+        name: { type: string, minLength: 1, maxLength: 64 }
+        api_url: { type: string, format: uri }
+        api_secret: { type: string, minLength: 1 }
+        outbound_json: { type: [string, "null"] }
+        config_url: { type: [string, "null"] }
+        kce_key: { type: string }
+        tags:
+          type: array
+          items: { type: string }
+        enabled: { type: boolean }
+        remark: { type: string }
+    NodeSummary:
+      type: object
+      required: [id, name, tags, enabled, online, active_connections, up_bps, down_bps]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        tags:
+          type: array
+          items: { type: string }
+        enabled: { type: boolean }
+        source: { type: string, description: "''=手工,`sub:<id>`=订阅导入" }
+        online: { type: boolean }
+        has_outbound: { type: boolean, description: 是否配置了出站(参与订阅与出口 IP 探测) }
+        up_bps: { type: integer, description: 当前上行速率 bit/s(离线为 0) }
+        down_bps: { type: integer, description: 当前下行速率 bit/s }
+        active_connections: { type: integer }
+        last_online_at: { type: [string, "null"], format: date-time }
+    NodeSummaryList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/NodeSummary" }
+        next_cursor: { type: [string, "null"] }
+        links:
+          type: [object, "null"]
+          properties:
+            self: { type: string, format: uri }
+            next: { type: string, format: uri }
+    NodeStatus:
+      type: object
+      required: [node_id, online, up_bps, down_bps, active_connections]
+      properties:
+        node_id: { type: string, format: uuid }
+        online: { type: boolean }
+        version: { type: [string, "null"], description: sing-box 版本(在线时) }
+        mode: { type: [string, "null"], enum: [rule, global, direct, "null"] }
+        up_bps: { type: integer }
+        down_bps: { type: integer }
+        memory_bytes: { type: [integer, "null"] }
+        active_connections: { type: integer }
+        last_online_at: { type: [string, "null"], format: date-time }
+        last_error: { type: [string, "null"], description: 最近一次采集失败原因(离线时) }
+    NodeCheckResult:
+      type: object
+      required: [node_id, online, checked_at]
+      properties:
+        node_id: { type: string, format: uuid }
+        online: { type: boolean }
+        latency_ms: { type: [integer, "null"] }
+        version: { type: [string, "null"] }
+        detail: { type: [string, "null"], description: 离线时的失败原因 }
+        checked_at: { type: string, format: date-time }
+    TrafficPoint:
+      type: object
+      required: [bucket_start, interval, up_bytes, down_bytes, peak_up_bps, peak_down_bps]
+      properties:
+        bucket_start: { type: string, format: date-time }
+        interval: { type: string, enum: [minute, hour, day] }
+        up_bytes: { type: integer, description: 该时段上行字节数 }
+        down_bytes: { type: integer }
+        peak_up_bps: { type: integer, description: 该时段峰值上行速率 }
+        peak_down_bps: { type: integer }
+        max_connections: { type: integer, description: 该时段最大并发连接数 }
+    TrafficSeries:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/TrafficPoint" }
+        next_cursor: { type: [string, "null"] }
+        links:
+          type: [object, "null"]
+          properties:
+            self: { type: string, format: uri }
+            next: { type: string, format: uri }
+    Geo:
+      type: object
+      properties:
+        country: { type: string }
+        region: { type: string }
+        city: { type: string }
+        as_org: { type: string }
+    IpStat:
+      type: object
+      required: [node_id, source_ip, upload_bytes, download_bytes, total_bytes, connections_total, first_seen_at, last_seen_at]
+      properties:
+        node_id: { type: string, format: uuid }
+        source_ip: { type: string, description: 客户端来源 IP }
+        upload_bytes: { type: integer }
+        download_bytes: { type: integer }
+        total_bytes: { type: integer }
+        connections_total: { type: integer, description: 累计连接条数 }
+        active_connections: { type: integer, description: 当前活跃连接数 }
+        first_seen_at: { type: string, format: date-time }
+        last_seen_at: { type: string, format: date-time }
+        geo: { $ref: "#/components/schemas/Geo" }
+    IpStatList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/IpStat" }
+        next_cursor: { type: [string, "null"] }
+        links:
+          type: [object, "null"]
+          properties:
+            self: { type: string, format: uri }
+            next: { type: string, format: uri }
+    ConnectionMetadata:
+      type: object
+      properties:
+        network: { type: string, description: tcp / udp }
+        type: { type: string, description: 入站协议类型 }
+        source_ip: { type: string }
+        source_port: { type: string }
+        destination_ip: { type: [string, "null"] }
+        destination_port: { type: [string, "null"] }
+        host: { type: [string, "null"] }
+        inbound_type: { type: [string, "null"] }
+    ConnectionItem:
+      type: object
+      required: [id, upload_bytes, download_bytes, start, chains, metadata]
+      properties:
+        id: { type: string }
+        upload_bytes: { type: integer }
+        download_bytes: { type: integer }
+        start: { type: string, format: date-time }
+        chains:
+          type: array
+          items: { type: string }
+        rule: { type: [string, "null"] }
+        rule_payload: { type: [string, "null"] }
+        outbound: { type: [string, "null"] }
+        metadata: { $ref: "#/components/schemas/ConnectionMetadata" }
+    ConnectionList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/ConnectionItem" }
+    ProxyItem:
+      type: object
+      required: [name, type]
+      properties:
+        name: { type: string }
+        type: { type: string, description: selector / urltest / 直连出站类型 }
+        now: { type: [string, "null"], description: 策略组当前选中项 }
+        all:
+          type: [array, "null"]
+          items: { type: string }
+    ProxyList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/ProxyItem" }
+    RuleItem:
+      type: object
+      required: [type, payload, proxy]
+      properties:
+        type: { type: string }
+        payload: { type: string }
+        proxy: { type: string }
+    RuleList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/RuleItem" }
+    Operation:
+      type: object
+      required: [id, node_id, type, status, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        node_id: { type: string, format: uuid }
+        type: { type: string, enum: [probe_exit_ip] }
+        status: { type: string, enum: [PENDING, RUNNING, SUCCEEDED, FAILED] }
+        result: { type: [string, "null"], description: 成功时的出口 IP }
+        error: { type: [string, "null"] }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    ExitIp:
+      type: object
+      required: [node_id, ip, checked_at]
+      properties:
+        node_id: { type: string, format: uuid }
+        ip: { type: string }
+        country: { type: [string, "null"] }
+        city: { type: [string, "null"] }
+        as_org: { type: [string, "null"] }
+        checked_at: { type: string, format: date-time }
+        method: { type: [string, "null"], description: "探测方式,如 singbox-probe" }
+    ShareLink:
+      type: object
+      required: [node_id, name, outbound_json]
+      properties:
+        node_id: { type: string, format: uuid }
+        name: { type: string }
+        uri:
+          type: [string, "null"]
+          description: 分享链接(协议支持时生成,如 vless://、ss://、hysteria2://);无法序列化为 URI 时为 null
+        outbound_json:
+          type: string
+          description: 出站配置 JSON,可直接粘贴进 sing-box 配置
+    SubscriptionInfo:
+      type: object
+      required: [enabled, formats]
+      properties:
+        enabled: { type: boolean }
+        token: { type: [string, "null"], description: 订阅令牌(吊销后为 null) }
+        url:
+          type: [string, "null"]
+          description: 完整订阅 URL 示例(按当前请求 Host 生成)
+        formats:
+          type: array
+          items: { type: string, enum: [singbox, clash, base64] }
+        updated_at: { type: string, format: date-time }
+    Overview:
+      type: object
+      required: [total_nodes, online_nodes, up_bps, down_bps, up_bytes_today, down_bytes_today, total_ips_seen, updated_at]
+      properties:
+        total_nodes: { type: integer }
+        online_nodes: { type: integer }
+        up_bps: { type: integer, description: 全部节点实时上行速率之和 }
+        down_bps: { type: integer }
+        up_bytes_today: { type: integer, description: 今日(UTC 日界)全部节点上行字节 }
+        down_bytes_today: { type: integer }
+        total_ips_seen: { type: integer, description: 历史上出现过的来源 IP 总数 }
+        online_ips:
+          type: integer
+          description: 当前有活跃连接的不同来源 IP 数(1.1.0 起新增,兼容扩展)
+        updated_at: { type: string, format: date-time }
+    TopNodeItem:
+      type: object
+      required: [node_id, name, up_bytes, down_bytes, total_bytes]
+      properties:
+        node_id: { type: string, format: uuid }
+        name: { type: string }
+        up_bytes: { type: integer }
+        down_bytes: { type: integer }
+        total_bytes: { type: integer }
+    TopNodeList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/TopNodeItem" }
+    TopIpItem:
+      type: object
+      required: [source_ip, up_bytes, down_bytes, total_bytes, nodes_count]
+      properties:
+        source_ip: { type: string }
+        up_bytes: { type: integer }
+        down_bytes: { type: integer }
+        total_bytes: { type: integer }
+        nodes_count: { type: integer, description: 该 IP 使用过的节点数 }
+        geo: { $ref: "#/components/schemas/Geo" }
+    TopIpList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/TopIpItem" }
+    Settings:
+      type: object
+      required: [sampler_interval_seconds, retention_days, ip_lookup_enabled, ip_lookup_provider_url]
+      properties:
+        sampler_interval_seconds:
+          type: integer
+          minimum: 2
+          maximum: 60
+          description: 连接/来源 IP 采样间隔
+        retention_days:
+          type: integer
+          minimum: 1
+          maximum: 365
+          description: 历史数据保留天数
+        ip_lookup_enabled: { type: boolean, description: 是否查询 IP 归属地 }
+        ip_lookup_provider_url:
+          type: string
+          format: uri
+          description: IP 归属查询服务地址(默认 http://ip-api.com/json/)
+        singbox_bin_path:
+          type: [string, "null"]
+          description: 本机 sing-box 二进制路径(出口 IP 探测用)
+        favicon_url: { type: string, format: uri-reference, description: 已上传时返回 /settings/favicon }
+        logo_url: { type: string, format: uri-reference, description: 已上传时返回 /settings/logo }
+        updated_at: { type: string, format: date-time }
+    SettingsPatch:
+      type: object
+      description: merge-patch 语义
+      properties:
+        sampler_interval_seconds: { type: integer, minimum: 2, maximum: 60 }
+        retention_days: { type: integer, minimum: 1, maximum: 365 }
+        ip_lookup_enabled: { type: boolean }
+        ip_lookup_provider_url: { type: string, format: uri }
+        singbox_bin_path: { type: [string, "null"] }

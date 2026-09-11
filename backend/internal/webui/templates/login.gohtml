@@ -1,0 +1,44 @@
+{{define "login"}}<!DOCTYPE html>
+<html lang="zh-CN" data-theme="{{.Theme}}">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{.Title}}</title>
+{{if .FaviconURL}}<link rel="icon" href="{{.FaviconURL}}">{{end}}
+<link rel="stylesheet" href="/admin/assets/style.css?v={{.CSSVer}}">
+</head>
+<body>
+<div class="login-wrap">
+  <header class="login-nav">
+    <div class="nav-inner">
+      <a href="/" class="nav-brand">
+        {{if .LogoURL}}<img src="{{.LogoURL}}" alt="logo" class="nav-logo">{{else}}<span class="nav-logo" aria-label="澪">澪</span>{{end}}
+        <span class="brand-text">sing-box hub</span>
+      </a>
+      <form method="post" action="/admin/theme" class="inline-form">
+        <input type="hidden" name="next" value="/login">
+        <button class="nav-btn" type="submit">{{if eq .Theme "dark"}}☀ LIGHT{{else}}☾ DARK{{end}}</button>
+      </form>
+    </div>
+  </header>
+  <div class="login-body">
+    <h1 class="login-title">sing-box 管理面板</h1>
+    <form method="post" action="/login">
+      <input type="hidden" name="next" value="{{.Path}}">
+      <label for="username">USERNAME</label>
+      <input id="username" name="username" value="admin" autocomplete="username" required>
+      <label for="password">PASSWORD</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required>
+      {{if .Error}}<p class="error mono">{{.Error}}</p>{{end}}
+      <button type="submit" class="submit-btn">登 录 →</button>
+    </form>
+  </div>
+</div>
+</body>
+</html>{{end}}
+
+{{define "frag_error"}}<div class="card error-card">
+  <p class="mono">{{.Message}}</p>
+</div>{{end}}
+
+{{define "page_empty"}}<div></div>{{end}}

@@ -1,0 +1,23 @@
+[Unit]
+Description=sing-box hub - independent multi-node sing-box panel
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=panel
+Group=panel
+# 面板工作目录(存放 SQLite、密钥与初始密码文件)
+WorkingDirectory=/var/lib/sing-box-hub
+ExecStart=/usr/local/bin/panel -listen :9090 -data-dir /var/lib/sing-box-hub
+Restart=on-failure
+RestartSec=5
+# 基础加固
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/sing-box-hub
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

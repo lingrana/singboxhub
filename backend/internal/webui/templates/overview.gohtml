@@ -1,0 +1,74 @@
+{{define "page_overview"}}
+<div class="page">
+  <div id="ov-stats"
+       hx-get="/admin/overview/stats" hx-trigger="every 5s" hx-swap="innerHTML">
+    {{template "frag_ov_stats" .Ov}}
+  </div>
+
+  <div class="overview-row">
+    <div class="card chart-card" style="flex:1;min-width:0">
+      <div class="row-head">
+        <h3>全节点流量趋势</h3>
+        <div class="fmt">
+          <button type="button" {{if eq .Range "hour"}}class="active" {{end}}
+                  hx-get="/admin/overview?range=hour" hx-target="#main-content" hx-swap="innerHTML" hx-push-url="true">最近 1 小时</button>
+          <button type="button" {{if eq .Range "6h"}}class="active" {{end}}
+                  hx-get="/admin/overview?range=6h" hx-target="#main-content" hx-swap="innerHTML" hx-push-url="true">最近 6 小时</button>
+          <button type="button" {{if eq .Range "24h"}}class="active" {{end}}
+                  hx-get="/admin/overview?range=24h" hx-target="#main-content" hx-swap="innerHTML" hx-push-url="true">最近 24 小时</button>
+        </div>
+      </div>
+      <div id="ov-chart"
+           hx-get="/admin/overview/chart?range={{.Range}}" hx-trigger="every 60s" hx-swap="innerHTML">
+        {{.Chart}}
+      </div>
+    </div>
+
+    <div id="ov-nodes"
+         hx-get="/admin/overview/nodes" hx-trigger="every 5s" hx-swap="innerHTML"
+         style="width:420px;flex-shrink:0">
+      {{template "frag_ov_nodes" nodeCardData}}
+    </div>
+  </div>
+</div>
+{{end}}
+
+{{define "frag_ov_stats"}}
+<div class="stats">
+  <div class="card stat"><div class="muted">在线节点</div><div class="value">{{.OnlineNodes}} / {{.TotalNodes}}</div></div>
+  <div class="card stat"><div class="muted">实时上行</div><div class="value">↑ {{fmtBps .UpBPS}}</div></div>
+  <div class="card stat"><div class="muted">实时下行</div><div class="value">↓ {{fmtBps .DownBPS}}</div></div>
+  <div class="card stat"><div class="muted">在线IP</div><div class="value">{{.OnlineIPs}}</div></div>
+</div>
+{{end}}
+
+{{define "frag_ov_chart"}}{{.Chart}}{{end}}
+
+{{define "frag_ov_nodes"}}
+{{if .Error}}
+<p class="muted">{{.Error}}</p>
+{{else if .Cards}}
+<div class="card">
+  <h3>今日流量排行</h3>
+  <table class="top-rank">
+    <thead>
+      <tr><th>#</th><th>节点</th><th>↑</th><th>↓</th><th>今日↑</th><th>今日↓</th></tr>
+    </thead>
+    <tbody>
+      {{range $i, $n := .Cards}}
+      <tr>
+        <td class="muted">{{$i | addOne}}</td>
+        <td>{{$n.Name}}</td>
+        <td>{{fmtBps $n.UpBPS}}</td>
+        <td>{{fmtBps $n.DownBPS}}</td>
+        <td>{{fmtBytes $n.TodayUpBytes}}</td>
+        <td>{{fmtBytes $n.TodayDownBytes}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</div>
+{{else}}
+<p class="muted">还没有节点,<a href="/admin/nodes">去添加</a></p>
+{{end}}
+{{end}}

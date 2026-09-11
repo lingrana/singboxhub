@@ -1,0 +1,129 @@
+{{define "status_page"}}<!DOCTYPE html>
+<html lang="zh-CN" data-theme="{{.Theme}}">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{.Title}}</title>
+{{if .FaviconURL}}<link rel="icon" href="{{.FaviconURL}}">{{end}}
+<link rel="stylesheet" href="/admin/assets/style.css?v={{.CSSVer}}">
+<script src="/admin/assets/htmx.min.js" defer></script>
+<script src="/admin/assets/app.js" defer></script>
+</head>
+<body>
+<div class="status-wrap">
+  <header class="status-nav">
+    <div class="nav-inner">
+      <a href="/" class="nav-brand">
+        {{if .LogoURL}}<img src="{{.LogoURL}}" alt="logo" class="nav-logo">{{else}}<span class="nav-logo" aria-label="澪">澪</span>{{end}}
+        <span class="brand-text">{{if .BrandName}}{{.BrandName}}{{else}}sing-box hub{{end}}</span>
+      </a>
+      <div class="nav-actions">
+        <form method="post" action="/admin/theme" class="inline-form">
+          <input type="hidden" name="next" value="/">
+          <button class="nav-btn theme-toggle" type="submit">{{if eq .Theme "dark"}}☀{{else}}☾{{end}}</button>
+        </form>
+        {{if .LoggedIn}}
+        <div class="user-menu">
+          <span class="user-avatar" hx-get="/user/profile" hx-target="body" hx-swap="beforeend">{{slice .Username 0 1}}</span>
+        </div>
+        {{else}}
+        <a href="/login?next=/" class="nav-btn">登 录</a>
+        {{end}}
+      </div>
+    </div>
+  </header>
+
+  <main class="status-container">
+    <div class="page">
+      <div id="st-overview"
+           hx-get="/status/overview" hx-trigger="every 5s" hx-swap="innerHTML">
+        {{if .Ov}}
+        {{template "frag_status_stats" .Ov}}
+        {{else}}
+        <div class="stats">
+          <div class="card stat"><div class="muted">在线节点</div><div class="value">—</div></div>
+          <div class="card stat"><div class="muted">实时上行</div><div class="value">—</div></div>
+          <div class="card stat"><div class="muted">实时下行</div><div class="value">—</div></div>
+        </div>
+        {{end}}
+      </div>
+
+      <div id="st-nodes"
+           hx-get="/status/nodes" hx-trigger="every 5s" hx-swap="innerHTML">
+        {{template "frag_status_nodes" .Nodes}}
+      </div>
+    </div>
+  </main>
+
+  <footer class="status-footer">
+    <span class="muted mono">sing-box hub · 独立的多节点管理面板</span>
+  </footer>
+</div>
+</body>
+</html>{{end}}
+
+{{define "frag_status_stats"}}
+<div class="stats">
+  <div class="card stat">
+    <div class="muted">在线节点</div>
+    <div class="value">{{.OnlineNodes}} / {{.TotalNodes}}</div>
+  </div>
+  <div class="card stat">
+    <div class="muted">实时上行</div>
+    <div class="value">↑ {{fmtBps .UpBPS}}</div>
+  </div>
+  <div class="card stat">
+    <div class="muted">实时下行</div>
+    <div class="value">↓ {{fmtBps .DownBPS}}</div>
+  </div>
+</div>
+{{end}}
+
+{{define "frag_status_nodes"}}
+<div class="node-cards">
+  {{if .}}
+  {{range .}}
+  <div class="card node-dash{{if not .Online}} off{{end}}">
+    <div class="nd-head">
+      <span class="nd-dot {{if .Online}}on{{else}}off{{end}}"></span>
+      <b class="nd-name">{{.Name}}</b>
+      {{if .Tags}}<span class="tag">{{index .Tags 0}}</span>{{end}}
+      {{if not .Enabled}}<span class="badge gray">停用</span>{{end}}
+    </div>
+    <div class="nd-grid">
+      <div class="nd-item">
+        <span class="nd-label">↑</span>
+        <span class="nd-val mono">{{fmtBps .UpBPS}}</span>
+      </div>
+      <div class="nd-item">
+        <span class="nd-label">↓</span>
+        <span class="nd-val mono">{{fmtBps .DownBPS}}</span>
+      </div>
+      <div class="nd-item">
+        <span class="nd-label">今日↑</span>
+        <span class="nd-val mono">{{fmtBytes .TodayUpBytes}}</span>
+      </div>
+      <div class="nd-item">
+        <span class="nd-label">今日↓</span>
+        <span class="nd-val mono">{{fmtBytes .TodayDownBytes}}</span>
+      </div>
+      <div class="nd-item">
+        <span class="nd-label">连接</span>
+        <span class="nd-val mono">{{.ActiveConnections}}</span>
+      </div>
+      {{if .MemoryBytes}}
+      <div class="nd-item">
+        <span class="nd-label">内存</span>
+        <span class="nd-val mono">{{fmtBytes .MemoryBytes}}</span>
+      </div>
+      {{end}}
+    </div>
+    <div class="nd-foot">
+    </div>
+  </div>
+  {{end}}
+  {{else}}
+  <p class="muted">暂无节点。</p>
+  {{end}}
+</div>
+{{end}}

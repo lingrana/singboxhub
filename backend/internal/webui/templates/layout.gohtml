@@ -1,0 +1,65 @@
+{{define "layout"}}<!DOCTYPE html>
+<html lang="zh-CN" data-theme="{{.Theme}}">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{.Title}}</title>
+{{if .FaviconURL}}<link rel="icon" href="{{.FaviconURL}}">{{end}}
+<link rel="stylesheet" href="/admin/assets/style.css?v={{.CSSVer}}">
+<script src="/admin/assets/htmx.min.js" defer></script>
+<script src="/admin/assets/app.js" defer></script>
+</head>
+<body>
+{{.BodyFrame}}
+</body>
+</html>{{end}}
+
+{{define "body_frame"}}
+<div class="frame">
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <a href="/" hx-get="/admin/overview" hx-target="#main-content" hx-swap="innerHTML" hx-push-url="true">
+        {{if .LogoURL}}<img src="{{.LogoURL}}" alt="logo" class="nav-logo">{{else}}<span class="nav-logo" aria-label="澪">澪</span>{{end}}
+        <span class="brand-text">{{if .BrandName}}{{.BrandName}}{{else}}sing-box hub{{end}}</span>
+      </a>
+    </div>
+    <nav class="sidebar-nav" id="sidebar-nav">
+      {{range .NavItems}}
+      <a href="{{.Href}}" class="sidebar-item{{if .Active}} active{{end}}"
+         hx-get="{{.Href}}" hx-target="#main-content" hx-swap="innerHTML" hx-push-url="true">{{.Label}}</a>
+      {{end}}
+    </nav>
+    <div class="sidebar-footer">
+      <form method="post" action="/admin/theme" class="inline-form">
+        <input type="hidden" name="next" value="{{.Path}}">
+        <button class="sidebar-btn" type="submit">{{if eq .Theme "dark"}}☀{{else}}☾{{end}}</button>
+      </form>
+      <form method="post" action="/logout" class="inline-form">
+        <button class="sidebar-btn" type="submit">⏻</button>
+      </form>
+    </div>
+  </aside>
+  <main class="main-content" id="main-content">
+    {{.BodyHTML}}
+  </main>
+</div>
+<div id="toast-stack" class="toast-stack" aria-live="polite"></div>
+{{end}}
+
+{{define "sidebar_nav_oob"}}
+<nav class="sidebar-nav" id="sidebar-nav" hx-swap-oob="true">
+  {{range .NavItems}}
+  <a href="{{.Href}}" class="sidebar-item{{if .Active}} active{{end}}"
+     hx-get="{{.Href}}" hx-target="#main-content" hx-swap="innerHTML" hx-push-url="true">{{.Label}}</a>
+  {{end}}
+</nav>
+{{end}}
+
+{{define "sidebar_brand_oob"}}
+<div class="sidebar-brand" hx-swap-oob="true">
+  <a href="/" hx-get="/admin/overview" hx-target="#main-content" hx-swap="innerHTML" hx-push-url="true">
+    {{if .LogoURL}}<img src="{{.LogoURL}}" alt="logo" class="nav-logo">{{else}}<span class="nav-logo" aria-label="澪">澪</span>{{end}}
+    <span class="brand-text">{{if .BrandName}}{{.BrandName}}{{else}}sing-box hub{{end}}</span>
+  </a>
+</div>
+{{end}}
