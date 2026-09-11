@@ -59,7 +59,16 @@ func (u *UI) Register(mux *http.ServeMux) {
 		u.logger.Error("static assets unavailable", "error", err)
 	}
 
-	mux.HandleFunc("GET /{$}", u.pageStatus)
+	// Use the portable root pattern here. Older Go runtimes treat the newer
+	// "/{$}" pattern as a literal path, which leaves the public home page at
+	// 404 even though the API is healthy.
+	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			http.NotFound(w, r)
+			return
+		}
+		u.pageStatus(w, r)
+	})
 
 	mux.HandleFunc("GET /status", u.pageStatus)
 	mux.HandleFunc("GET /status/overview", u.fragStatusOverview)
