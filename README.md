@@ -43,7 +43,7 @@ docker compose up -d
 
 每次推送到 `main` 或创建 `v*.*.*` 标签时,GitHub Actions 会构建并发布镜像
 `ghcr.io/lingrana/singboxhub`。`deploy/docker-compose.yml` 默认直接拉取
-`ghcr.io/lingrana/singboxhub:main`;镜像不包含数据库、密钥或节点配置。
+`ghcr.io/lingrana/singboxhub:latest`;镜像不包含数据库、密钥或节点配置。
 
 ### 二进制 / systemd
 

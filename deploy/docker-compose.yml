@@ -1,6 +1,6 @@
 services:
   panel:
-    image: ghcr.io/lingrana/singboxhub:main
+    image: ghcr.io/lingrana/singboxhub:latest
     pull_policy: always
     container_name: sing-box-hub
     restart: unless-stopped
