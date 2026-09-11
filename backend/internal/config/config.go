@@ -131,7 +131,7 @@ type SamplerConfig struct {
 
 func defaults() Config {
 	return Config{
-		ListenAddr: ":9090",
+		ListenAddr: ":42501",
 		DataDir:    "data",
 		DBPath:     "",
 		LogLevel:   "info",

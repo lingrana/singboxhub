@@ -30,7 +30,7 @@ info:
     - **公开状态**:`/api/public/*` 无需登录,公开节点名称、标签、出口 IP、版本和运行统计,
       不返回 API 地址、API secret、来源 IP 明细或出站配置。
 servers:
-  - url: http://localhost:9090
+  - url: http://localhost:42501
     description: 本地开发默认地址
 tags:
   - name: system
@@ -207,12 +207,12 @@ paths:
               minimal:
                 value:
                   name: home-sb
-                  api_url: http://192.168.1.10:9090
+                  api_url: http://192.168.1.10:42501
                   api_secret: s3cret
               full:
                 value:
                   name: vps-jp
-                  api_url: https://sb.example.net:9090
+                  api_url: https://sb.example.net:42501
                   api_secret: s3cret
                   tags: [prod, jp]
                   enabled: true
@@ -1209,7 +1209,7 @@ components:
         - type: https://sing-hub.dev/probs/node-unreachable
           title: Node unreachable
           status: 502
-          detail: "dial tcp 192.168.1.10:9090: connect refused"
+          detail: "dial tcp 192.168.1.10:42501: connect refused"
           instance: /nodes/3fa85f64-5717-4562-b3fc-2c963f66afa6/connections
     LoginInput:
       type: object
@@ -1282,7 +1282,7 @@ components:
         api_url:
           type: string
           format: uri
-          description: 节点 Clash API 地址,如 http://10.0.0.2:9090
+          description: 节点 Clash API 地址,如 http://10.0.0.2:42501
         api_secret: { type: string, minLength: 1 }
         outbound_json:
           type: [string, "null"]

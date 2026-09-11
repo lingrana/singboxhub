@@ -38,7 +38,7 @@ Web UI 由 Go `html/template` 服务端渲染 + 内嵌 htmx 实现,**无 Node/np
 cd deploy
 docker compose up -d
 # 初始密码:deploy/data/initial-admin-password.txt(登录后请删除该文件)
-# 面板:http://<服务器>:9090
+# 面板:http://<服务器>:42501
 ```
 
 每次推送到 `main` 或创建 `v*.*.*` 标签时,GitHub Actions 会构建并发布镜像
@@ -67,7 +67,7 @@ sudo systemctl enable --now panel
 
 | Flag | 环境变量 | 默认 | 说明 |
 | --- | --- | --- | --- |
-| `-listen` | `SINGHUB_LISTEN` | `:9090` | 监听地址 |
+| `-listen` | `SINGHUB_LISTEN` | `:42501` | 监听地址 |
 | `-data-dir` | `SINGHUB_DATA_DIR` | `data` | 数据目录(SQLite/密钥) |
 | `-log-level` | `SINGHUB_LOG_LEVEL` | `info` | debug/info/warn/error |
 
@@ -79,14 +79,14 @@ sudo systemctl enable --now panel
 {
   "experimental": {
     "clash_api": {
-      "external_controller": "0.0.0.0:9090",
+      "external_controller": "0.0.0.0:42501",
       "secret": "换一个强随机串"
     }
   }
 }
 ```
 
-然后在面板「节点管理 → 添加节点」填入 `http://<节点IP>:9090` 与该 secret。
+然后在面板「节点管理 → 添加节点」填入 `http://<节点IP>:42501` 与该 secret。
 可选:粘贴该节点的**出站(outbound)JSON**——配置后该节点会出现在订阅里,并支持出口 IP 探测。
 
 > 安全提示:Clash API 本身是明文 HTTP。请确保面板与节点之间的网络可信
@@ -119,7 +119,7 @@ sudo systemctl enable --now panel
 ## 本地开发
 
 ```bash
-cd backend && go run ./cmd/panel              # 面板(http://127.0.0.1:9090)
+cd backend && go run ./cmd/panel              # 面板(http://127.0.0.1:42501)
 go run ./cmd/mockclash                        # 可选:假节点,无需真实 sing-box 即可体验
 ```
 

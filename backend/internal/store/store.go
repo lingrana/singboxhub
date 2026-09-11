@@ -50,25 +50,25 @@ func Open(dbPath string) (*Store, error) {
 
 // OpenWithConfig opens a SQLite or PostgreSQL database and runs migrations.
 func OpenWithConfig(driver, dsn string) (*Store, error) {
-	driver = Driver(strings.ToLower(strings.TrimSpace(driver)))
-	if driver != DriverSQLite && driver != DriverPostgres {
+	driver = strings.ToLower(strings.TrimSpace(driver))
+	if driver != string(DriverSQLite) && driver != string(DriverPostgres) {
 		return nil, fmt.Errorf("unsupported database driver %q", driver)
 	}
 	if strings.TrimSpace(dsn) == "" {
 		return nil, fmt.Errorf("database dsn is required")
 	}
 	driverName := string(driver)
-	if driver == DriverSQLite {
+	if driver == string(DriverSQLite) {
 		dsn = "file:" + dsn + "?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)"
 	}
 	db, err := sql.Open(driverName, dsn)
 	if err != nil {
 		return nil, err
 	}
-	if driver == DriverSQLite {
+	if driver == string(DriverSQLite) {
 		db.SetMaxOpenConns(1)
 	}
-	s := &Store{db: db, driver: driver}
+	s := &Store{db: db, driver: Driver(driver)}
 	if err := db.Ping(); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("ping database: %w", err)

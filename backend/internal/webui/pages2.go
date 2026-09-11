@@ -456,12 +456,12 @@ func publicOrigin(r *http.Request) string {
 	// Use the Host header but sanitize it
 	host := r.Host
 	if host == "" {
-		host = "localhost:9090"
+		host = "localhost:42501"
 	}
 
 	// Validate host to prevent injection
 	if strings.ContainsAny(host, "\n\r\t") {
-		host = "localhost:9090"
+		host = "localhost:42501"
 	}
 
 	return scheme + "://" + host

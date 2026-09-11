@@ -90,7 +90,7 @@
       <input name="name" value="{{.Name}}" placeholder="如 jp-vps" required maxlength="64">
       {{if fieldErr .FieldErrors "name"}}<p class="mono muted">✕ {{fieldErr .FieldErrors "name"}}</p>{{end}}
       <label>Clash API 地址 *</label>
-      <input name="api_url" placeholder="http://1.2.3.4:9090" value="{{.APIURL}}" required>
+      <input name="api_url" placeholder="http://1.2.3.4:42501" value="{{.APIURL}}" required>
       {{if fieldErr .FieldErrors "api_url"}}<p class="mono muted">✕ {{fieldErr .FieldErrors "api_url"}}</p>{{end}}
       <label>API Secret *</label>
       <input name="api_secret" type="password" placeholder="experimental.clash_api.secret" required>

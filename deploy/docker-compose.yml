@@ -5,14 +5,14 @@ services:
     container_name: sing-box-hub
     restart: unless-stopped
     ports:
-      - "9090:9090"
+      - "42501:42501"
     volumes:
       - ./data:/data
     environment:
       # 首次运行的管理员密码写入 /data/initial-admin-password.txt
       - TZ=Asia/Shanghai
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9090/health"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:42501/health"]
       interval: 30s
       timeout: 5s
       retries: 3

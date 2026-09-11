@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/sing-hub/panel/internal/httpx"
 	"github.com/sing-hub/panel/internal/kce"

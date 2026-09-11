@@ -170,7 +170,7 @@ func TestNodeCrudAndValidation(t *testing.T) {
 
 	// 创建:201 + Location
 	status, node, hdr := e.do(t, "POST", "/nodes", map[string]any{
-		"name": "n1", "api_url": "http://10.0.0.1:9090", "api_secret": "s3cret",
+		"name": "n1", "api_url": "http://10.0.0.1:42501", "api_secret": "s3cret",
 	}, h)
 	if status != http.StatusCreated {
 		t.Fatalf("create = %d %v", status, node)
@@ -188,7 +188,7 @@ func TestNodeCrudAndValidation(t *testing.T) {
 
 	// 重名:409
 	status, body, _ := e.do(t, "POST", "/nodes", map[string]any{
-		"name": "n1", "api_url": "http://10.0.0.2:9090", "api_secret": "x",
+		"name": "n1", "api_url": "http://10.0.0.2:42501", "api_secret": "x",
 	}, h)
 	if status != http.StatusConflict {
 		t.Fatalf("duplicate = %d", status)
@@ -240,7 +240,7 @@ func TestCreateNodeIdempotencyKey(t *testing.T) {
 	e := newTestEnv(t)
 	e.token = e.login(t)
 	h := map[string]string{"Authorization": "Bearer " + e.token, "Idempotency-Key": "key-1"}
-	payload := map[string]any{"name": "idem", "api_url": "http://10.0.0.9:9090", "api_secret": "s"}
+	payload := map[string]any{"name": "idem", "api_url": "http://10.0.0.9:42501", "api_secret": "s"}
 
 	status1, body1, _ := e.do(t, "POST", "/nodes", payload, h)
 	status2, body2, _ := e.do(t, "POST", "/nodes", payload, h)
@@ -259,7 +259,7 @@ func TestNodePaginationKeyset(t *testing.T) {
 
 	for i := 0; i < 25; i++ {
 		status, _, _ := e.do(t, "POST", "/nodes", map[string]any{
-			"name": fmt.Sprintf("node-%02d", i), "api_url": "http://10.0.0.1:9090", "api_secret": "s",
+		"name": fmt.Sprintf("node-%02d", i), "api_url": "http://10.0.0.1:42501", "api_secret": "s",
 		}, h)
 		if status != http.StatusCreated {
 			t.Fatalf("seed %d = %d", i, status)
@@ -352,7 +352,7 @@ func TestSubscriptionLifecycle(t *testing.T) {
 
 	// 生成节点(含 outbound)→ 令牌 → 订阅可用
 	status, _, _ := e.do(t, "POST", "/nodes", map[string]any{
-		"name": "sub-node", "api_url": "http://10.0.0.3:9090", "api_secret": "s",
+		"name": "sub-node", "api_url": "http://10.0.0.3:42501", "api_secret": "s",
 		"outbound_json": `{"type":"vless","tag":"t1","server":"1.2.3.4","server_port":443,"uuid":"11111111-2222-3333-4444-555555555555"}`,
 	}, h)
 	if status != http.StatusCreated {
@@ -399,7 +399,7 @@ func TestTrafficValidation(t *testing.T) {
 	h := e.authedHeaders(t)
 
 	status, node, _ := e.do(t, "POST", "/nodes", map[string]any{
-		"name": "traffic-node", "api_url": "http://10.0.0.4:9090", "api_secret": "s",
+		"name": "traffic-node", "api_url": "http://10.0.0.4:42501", "api_secret": "s",
 	}, h)
 	id := node["id"].(string)
 

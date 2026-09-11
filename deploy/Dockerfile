@@ -7,11 +7,11 @@ COPY backend ./
 RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /out/panel ./cmd/panel
 
 FROM alpine:3.20
-RUN adduser -D -u 10001 panel && apk add --no-cache ca-certificates tzdata
+RUN adduser -D -u 10001 panel && apk add --no-cache ca-certificates tzdata wget
 COPY --from=build /out/panel /usr/local/bin/panel
 USER panel
 WORKDIR /data
 VOLUME /data
-EXPOSE 9090
+EXPOSE 42501
 ENTRYPOINT ["panel"]
-CMD ["-listen", ":9090", "-data-dir", "/data"]
+CMD ["-listen", ":42501", "-data-dir", "/data"]
