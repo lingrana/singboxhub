@@ -5,7 +5,6 @@
     <button class="primary" type="button"
             hx-get="/admin/nodes/manage" hx-target="body" hx-swap="beforeend">管理主机</button>
   </div>
-  <p class="muted">主机 = 部署在各服务器上的 sing-box 实例(通过其 Clash API 采集监控);出站代理在「订阅」页管理。</p>
   <div id="node-form-slot"></div>
   <div id="node-list"
        hx-get="/admin/nodes/list" hx-trigger="every 5s, refresh-nodes from:body" hx-swap="innerHTML">
@@ -50,7 +49,7 @@
   </div>
   {{end}}
   {{if not .HostNodes}}
-  <p class="muted">暂无主机。点击右上角「管理主机」,填入各 sing-box 的 Clash API 地址与 secret。</p>
+  <p class="muted">暂无主机。点击右上角「管理主机」添加。</p>
   {{end}}
 </div>
 {{end}}
@@ -149,7 +148,8 @@
           <td>
             <button type="button" class="danger" hx-post="/admin/nodes/{{.ID}}/delete"
                     hx-confirm="确定删除主机「{{.Name}}」?其统计数据与自动导入的代理将一并删除。"
-                    hx-target="closest tr" hx-swap="outerHTML swap:1s">删除</button>
+                    hx-target="closest tr" hx-swap="outerHTML swap:1s"
+                    hx-on::after-request="if(event.detail.successful){htmx.trigger(document.body,'refresh-nodes')}">删除</button>
           </td>
         </tr>
         {{end}}

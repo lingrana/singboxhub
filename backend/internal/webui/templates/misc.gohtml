@@ -12,52 +12,30 @@
 {{end}}
 
 {{define "frag_traffic_table"}}
-<div class="card">
-  {{if .Nodes}}
-  <table>
-    <thead>
-      <tr>
-        <th>节点</th>
-        <th>状态</th>
-        <th>实时 ↑</th>
-        <th>实时 ↓</th>
-        <th>今日 ↑</th>
-        <th>今日 ↓</th>
-        <th>总 ↑</th>
-        <th>总 ↓</th>
-        <th>连接</th>
-      </tr>
-    </thead>
-    <tbody>
-      {{range .Nodes}}
-      <tr>
-        <td>{{.Name}}</td>
-        <td>{{if .Enabled}}{{if .Online}}在线{{else}}离线{{end}}{{else}}停用{{end}}</td>
-        <td>{{fmtBps .UpBPS}}</td>
-        <td>{{fmtBps .DownBPS}}</td>
-        <td>{{fmtBytes .TodayUpBytes}}</td>
-        <td>{{fmtBytes .TodayDownBytes}}</td>
-        <td>{{fmtBytes .TotalUpBytes}}</td>
-        <td>{{fmtBytes .TotalDownBytes}}</td>
-        <td>{{.ActiveConnections}}</td>
-      </tr>
-      {{end}}
-    </tbody>
-    <tfoot>
-      <tr style="font-weight:700;border-top:2px solid var(--border)">
-        <td>合计</td>
-        <td></td>
-        <td>{{fmtBps .TotalUpBPS}}</td>
-        <td>{{fmtBps .TotalDownBPS}}</td>
-        <td>{{fmtBytes .TotalTodayUp}}</td>
-        <td>{{fmtBytes .TotalTodayDown}}</td>
-        <td>{{fmtBytes .TotalAllUp}}</td>
-        <td>{{fmtBytes .TotalAllDown}}</td>
-        <td>{{.TotalConns}}</td>
-      </tr>
-    </tfoot>
-  </table>
-  {{else}}
+<div class="cards">
+  {{range .Nodes}}
+  <div class="card node-card{{if not .Enabled}} off{{end}}">
+    <div class="row">
+      <span class="badge {{if .Online}}ok{{else}}bad{{end}}">{{if .Online}}在线{{else}}离线{{end}}</span>
+      <b class="name">{{.Name}}</b>
+      {{if not .Enabled}}<span class="badge gray">已停用</span>{{end}}
+    </div>
+    <div class="metrics mono">
+      <span>↑ {{fmtBps .UpBPS}}</span>
+      <span>↓ {{fmtBps .DownBPS}}</span>
+      <span>{{.ActiveConnections}} 连接</span>
+    </div>
+    <div class="metrics mono">
+      <span>今日 ↑ {{fmtBytes .TodayUpBytes}}</span>
+      <span>今日 ↓ {{fmtBytes .TodayDownBytes}}</span>
+    </div>
+    <div class="metrics mono muted">
+      <span>累计 ↑ {{fmtBytes .TotalUpBytes}}</span>
+      <span>累计 ↓ {{fmtBytes .TotalDownBytes}}</span>
+    </div>
+  </div>
+  {{end}}
+  {{if not .Nodes}}
   <p class="muted">暂无节点。</p>
   {{end}}
 </div>
@@ -465,30 +443,38 @@
 <div class="subscription-node-list">
   {{$total := add (len .Rule) (add (len .Global) (len .Direct))}}
   {{if gt $total 0}}
-    {{range $key := listOf "rule" "global" "direct"}}
-    {{range index $.NodeGroups $key}}
-    <div class="subscription-node" data-group="{{$key}}">
-      <div class="subscription-node-main">
-        <span class="subscription-node-status{{if .Online}} online{{end}}" title="{{if .Online}}在线{{else}}离线或未连接{{end}}"></span>
-        <div class="subscription-node-copy">
-          <b class="subscription-node-name">{{.Name}}</b>
-          <div class="subscription-node-meta mono">
-            {{if .Type}}<span class="tag">{{.Type}}</span>{{end}}
-            {{if .Server}}<span>{{.Server}}{{if .Port}}:{{.Port}}{{end}}</span>{{end}}
-            {{if .Source}}<span class="muted">导入</span>{{end}}
-          </div>
-        </div>
-      </div>
-      <div class="subscription-node-actions">
-        <button type="button" class="subscription-node-action" title="延迟测试"
-                hx-post="/admin/nodes/{{.ID}}/latency" hx-swap="none">−</button>
-        <button type="button" class="subscription-node-action" title="停用节点"
-                hx-post="/admin/nodes/{{.ID}}/toggle" hx-vals='{"enable":"false"}'
-                hx-confirm="停用后订阅立即不含该节点。">⌃</button>
-      </div>
-    </div>
-    {{end}}
-    {{end}}
+  <table>
+    <thead>
+      <tr>
+        <th></th>
+        <th>节点名称</th>
+        <th>类型</th>
+        <th>服务器</th>
+        <th>端口</th>
+        <th>操作</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range $key := listOf "rule" "global" "direct"}}
+      {{range index $.NodeGroups $key}}
+      <tr data-group="{{$key}}">
+        <td><span class="subscription-node-status{{if .Online}} online{{end}}" title="{{if .Online}}在线{{else}}离线{{end}}"></span></td>
+        <td><b>{{.Name}}</b></td>
+        <td>{{if .Type}}<span class="tag">{{.Type}}</span>{{end}}</td>
+        <td class="mono">{{if .Server}}{{.Server}}{{end}}</td>
+        <td class="mono">{{if .Port}}{{.Port}}{{end}}</td>
+        <td>
+          <button type="button" class="btn-icon" title="延迟测试"
+                  hx-post="/admin/nodes/{{.ID}}/latency" hx-swap="none">测速</button>
+          <button type="button" class="btn-icon danger" title="停用节点"
+                  hx-post="/admin/nodes/{{.ID}}/toggle" hx-vals='{"enable":"false"}'
+                  hx-confirm="停用后订阅立即不含该节点。">停用</button>
+        </td>
+      </tr>
+      {{end}}
+      {{end}}
+    </tbody>
+  </table>
   {{else}}
   <p class="muted">暂无已启用节点。</p>
   {{end}}

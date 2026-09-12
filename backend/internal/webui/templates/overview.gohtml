@@ -52,15 +52,13 @@
   <h3>今日流量排行</h3>
   <table class="top-rank">
     <thead>
-      <tr><th>#</th><th>节点</th><th>↑</th><th>↓</th><th>今日↑</th><th>今日↓</th></tr>
+      <tr><th>#</th><th>节点</th><th>今日↑</th><th>今日↓</th></tr>
     </thead>
     <tbody>
       {{range $i, $n := .Cards}}
       <tr>
         <td class="muted">{{$i | addOne}}</td>
         <td>{{$n.Name}}</td>
-        <td>{{fmtBps $n.UpBPS}}</td>
-        <td>{{fmtBps $n.DownBPS}}</td>
         <td>{{fmtBytes $n.TodayUpBytes}}</td>
         <td>{{fmtBytes $n.TodayDownBytes}}</td>
       </tr>

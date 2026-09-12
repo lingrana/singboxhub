@@ -387,12 +387,20 @@ func (u *UI) fetchSubNodes(r *http.Request, token string) []subNodeRow {
 	if _, err := u.apiGetJSON(r, token, "/nodes?page_size=100", &list); err != nil {
 		return nil
 	}
+	// Build host name map: anchor nodes use their own name, imported nodes use anchor's name
 	hostNames := make(map[string]string, len(list.Items))
 	for _, n := range list.Items {
 		if n.Source == "" {
 			hostNames[n.ID] = n.Name
-		} else {
-			hostNames[n.ID] = importedNameBase(n)
+		}
+	}
+	for _, n := range list.Items {
+		if n.Source != "" {
+			if anchor, ok := hostNames[n.HostID]; ok {
+				hostNames[n.ID] = strings.ToLower(anchor)
+			} else {
+				hostNames[n.ID] = strings.ToLower(n.Name)
+			}
 		}
 	}
 	rows := make([]subNodeRow, 0, len(list.Items))
@@ -425,21 +433,6 @@ func (u *UI) fetchSubNodes(r *http.Request, token string) []subNodeRow {
 		})
 	}
 	return rows
-}
-
-// importedNameBase prefers the parsed host label (for example
-// KataBump-Direct) and removes its final group suffix. The subscription list
-// then appends the actual outbound protocol to produce names such as
-// KataBump-Vless and KataBump-Trojan.
-func importedNameBase(n nodeSummary) string {
-	name := strings.TrimSpace(n.ParsedName)
-	if name == "" {
-		return n.Name
-	}
-	if i := strings.LastIndex(name, "-"); i > 0 {
-		name = name[:i]
-	}
-	return name
 }
 
 // inferModeFromName extracts mode (rule/global/direct) from the final
