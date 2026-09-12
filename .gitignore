@@ -47,3 +47,4 @@ docs/review-*.md
 docs/bug-review-*/
 docs/bugfix-*.md
 AGENTS.md
+.gocache/
