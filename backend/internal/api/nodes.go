@@ -151,6 +151,8 @@ func (s *Server) summaryItem(n *store.Node) map[string]any {
 		"down_bps":           status.DownBPS,
 		"active_connections": status.ActiveConnections,
 		"last_online_at":     nullableTime(n.LastOnline, n.HasLastOnl),
+		"latency_ms":         n.LatencyMs,
+		"latency_fail_count": n.LatencyFailCount,
 	}
 	if parsed := s.parsedOutboundSummary(n); parsed != nil {
 		for key, value := range parsed {

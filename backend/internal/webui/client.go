@@ -186,6 +186,8 @@ type nodeSummary struct {
 	ParsedName        string   `json:"parsed_name"`
 	Server            string   `json:"server"`
 	ServerPort        int      `json:"server_port"`
+	LatencyMs         int      `json:"latency_ms"`
+	LatencyFailCount  int      `json:"latency_fail_count"`
 }
 
 type nodeList struct {
