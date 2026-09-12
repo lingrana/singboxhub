@@ -21,9 +21,11 @@ type Monitor struct {
 	logger    *slog.Logger
 	cryptoKey []byte
 
-	ctx    context.Context
-	cancel context.CancelFunc
-	wg     sync.WaitGroup
+	ctx          context.Context
+	cancel       context.CancelFunc
+	wg           sync.WaitGroup
+	icmpDisabled bool
+	mu           sync.Mutex
 }
 
 // NewMonitor creates a latency monitor.
@@ -176,6 +178,14 @@ func (m *Monitor) checkAllNodes(settings *store.Settings) {
 }
 
 func (m *Monitor) ping(server, target string) (int64, error) {
+	m.mu.Lock()
+	disabled := m.icmpDisabled
+	m.mu.Unlock()
+
+	if disabled {
+		return -1, nil
+	}
+
 	// Resolve server to IP
 	ips, err := net.LookupIP(server)
 	if err != nil || len(ips) == 0 {
@@ -184,7 +194,14 @@ func (m *Monitor) ping(server, target string) (int64, error) {
 
 	conn, err := icmp.ListenPacket("ip4:icmp", "0.0.0.0")
 	if err != nil {
-		return -1, err
+		// ICMP requires special permissions - disable monitoring if unavailable
+		m.mu.Lock()
+		if !m.icmpDisabled {
+			m.icmpDisabled = true
+			m.logger.Warn("ICMP monitoring disabled: insufficient permissions (requires CAP_NET_RAW or root)", "error", err)
+		}
+		m.mu.Unlock()
+		return -1, nil
 	}
 	defer conn.Close()
 
