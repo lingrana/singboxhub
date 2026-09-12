@@ -12,13 +12,22 @@ backend/smoketest/
 *.db
 *.db-wal
 *.db-shm
-secret.key
-jwt.key
+*.sqlite
+*.sqlite3
+*.sqlite-wal
+*.sqlite-shm
+*.key
+*.secret
+*.token
+*.credentials
 initial-admin-password.txt
 
 # 本地配置与凭据
 .env
 .env.*
+*.env
+*.env.*
+*.local
 *.local.yaml
 *.local.yml
 *.pem

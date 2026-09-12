@@ -215,6 +215,18 @@
     }
   });
 
+  // The profile response rotates the session after a username/password
+  // change. Refresh the original profile modal with the new claims.
+  document.body.addEventListener('profile-updated', function () {
+    fetch('/user/profile').then(function (r) { return r.text(); }).then(function (html) {
+      var tmp = document.createElement('div');
+      tmp.innerHTML = html;
+      var next = tmp.querySelector('#profile-modal');
+      var current = document.getElementById('profile-modal');
+      if (next && current) current.replaceWith(next);
+    });
+  });
+
   // ---- sync tab title after OOB brand swap ----
   document.body.addEventListener('htmx:oobAfterSwap', function (evt) {
     if (evt.detail.target && evt.detail.target.classList &&

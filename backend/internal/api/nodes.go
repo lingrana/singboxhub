@@ -136,9 +136,11 @@ func (s *Server) handleListNodes(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) summaryItem(n *store.Node) map[string]any {
 	status, _ := s.hub.Status(n.ID)
-	return map[string]any{
+	item := map[string]any{
 		"id":                 n.ID,
 		"name":               n.Name,
+		"api_url":            n.APIURL,
+		"config_imported":    n.ConfigURL != "",
 		"tags":               n.Tags,
 		"enabled":            n.Enabled,
 		"source":             n.Source,
@@ -148,6 +150,44 @@ func (s *Server) summaryItem(n *store.Node) map[string]any {
 		"down_bps":           status.DownBPS,
 		"active_connections": status.ActiveConnections,
 		"last_online_at":     nullableTime(n.LastOnline, n.HasLastOnl),
+	}
+	if parsed := s.parsedOutboundSummary(n); parsed != nil {
+		for key, value := range parsed {
+			item[key] = value
+		}
+	}
+	if strings.HasPrefix(n.Source, "node:") {
+		item["host_id"] = strings.TrimPrefix(n.Source, "node:")
+	} else {
+		item["host_id"] = n.ID
+	}
+	return item
+}
+
+// parsedOutboundSummary exposes only the non-sensitive identity fields needed
+// by the server-rendered node list. Credentials remain encrypted and private.
+func (s *Server) parsedOutboundSummary(n *store.Node) map[string]any {
+	if n.OutboundEnc == "" {
+		return nil
+	}
+	plain, err := cryptox.Decrypt(s.cryptoKey, n.OutboundEnc)
+	if err != nil {
+		return nil
+	}
+	var outbound struct {
+		Tag        string `json:"tag"`
+		Type       string `json:"type"`
+		Server     string `json:"server"`
+		ServerPort int    `json:"server_port"`
+	}
+	if json.Unmarshal([]byte(plain), &outbound) != nil {
+		return nil
+	}
+	return map[string]any{
+		"parsed_name": outbound.Tag,
+		"parsed_type": outbound.Type,
+		"server":      outbound.Server,
+		"server_port": outbound.ServerPort,
 	}
 }
 

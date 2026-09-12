@@ -282,7 +282,20 @@ type nodeCardData struct {
 
 type nodesBody struct {
 	Base
-	Nodes []nodeSummary
+	Nodes     []nodeSummary
+	HostNodes []hostNodeView
+}
+
+type hostNodeView struct {
+	nodeSummary
+	UpBPS             int64
+	DownBPS           int64
+	ActiveConnections int
+	TodayUpBytes      int64
+	TodayDownBytes    int64
+	TotalUpBytes      int64
+	TotalDownBytes    int64
+	ParsedNodes       []nodeCard
 }
 
 func (u *UI) pageNodes(w http.ResponseWriter, r *http.Request) {
@@ -292,7 +305,7 @@ func (u *UI) pageNodes(w http.ResponseWriter, r *http.Request) {
 		u.renderFrag(w, "frag_error", fragErr{Message: "主机列表加载失败:" + err.Error()})
 		return
 	}
-	body := nodesBody{Nodes: list.Items}
+	body := nodesBody{Nodes: rootNodes(list.Items), HostNodes: u.buildHostNodes(r, token, list.Items)}
 	body.Base = u.rd.base("nodes", "主机 · sing-box hub", u.usernameOf(r), u.themeOf(r))
 	u.renderPage(w, r, "nodes", "主机 · sing-box hub", body)
 }
@@ -304,7 +317,7 @@ func (u *UI) fragNodeList(w http.ResponseWriter, r *http.Request) {
 		u.renderFrag(w, "frag_node_list", nodesBody{Nodes: nil})
 		return
 	}
-	u.renderFrag(w, "frag_node_list", nodesBody{Nodes: list.Items})
+	u.renderFrag(w, "frag_node_list", nodesBody{Nodes: rootNodes(list.Items), HostNodes: u.buildHostNodes(r, token, list.Items)})
 }
 
 func (u *UI) fragNodeManage(w http.ResponseWriter, r *http.Request) {
@@ -314,7 +327,75 @@ func (u *UI) fragNodeManage(w http.ResponseWriter, r *http.Request) {
 		u.renderFrag(w, "frag_error", fragErr{Message: "主机列表加载失败"})
 		return
 	}
-	u.renderFrag(w, "frag_node_manage", nodesBody{Nodes: list.Items})
+	u.renderFrag(w, "frag_node_manage", nodesBody{Nodes: rootNodes(list.Items), HostNodes: u.buildHostNodes(r, token, list.Items)})
+}
+
+func rootNodes(nodes []nodeSummary) []nodeSummary {
+	roots := make([]nodeSummary, 0, len(nodes))
+	for _, n := range nodes {
+		if n.Source == "" {
+			roots = append(roots, n)
+		}
+	}
+	return roots
+}
+
+func (u *UI) buildHostNodes(r *http.Request, token string, nodes []nodeSummary) []hostNodeView {
+	var stats nodeCardList
+	if _, err := u.apiGetJSON(r, token, "/stats/nodes", &stats); err != nil {
+		stats.Items = nil
+	}
+	byID := make(map[string]nodeCard, len(stats.Items))
+	for _, item := range stats.Items {
+		byID[item.ID] = item
+	}
+	hosts := make([]hostNodeView, 0)
+	byHost := make(map[string]int)
+	for _, n := range nodes {
+		if n.Source != "" {
+			continue
+		}
+		h := hostNodeView{nodeSummary: n}
+		h.addStats(byID[n.ID])
+		if n.ConfigImported && (n.ParsedName != "" || n.ParsedType != "" || n.Server != "") {
+			h.ParsedNodes = append(h.ParsedNodes, nodeCard{
+				ID: n.ID, Name: n.ParsedName, ParsedName: n.ParsedName,
+				ParsedType: n.ParsedType, Server: n.Server, ServerPort: n.ServerPort,
+			})
+		}
+		byHost[n.ID] = len(hosts)
+		hosts = append(hosts, h)
+	}
+	for _, n := range nodes {
+		if n.Source == "" || n.HostID == "" {
+			continue
+		}
+		i, ok := byHost[n.HostID]
+		if !ok {
+			continue
+		}
+		child := byID[n.ID]
+		child.ID = n.ID
+		child.Name = n.Name
+		child.Source = n.Source
+		child.ParsedName = n.ParsedName
+		child.ParsedType = n.ParsedType
+		child.Server = n.Server
+		child.ServerPort = n.ServerPort
+		hosts[i].ParsedNodes = append(hosts[i].ParsedNodes, child)
+		hosts[i].addStats(child)
+	}
+	return hosts
+}
+
+func (h *hostNodeView) addStats(s nodeCard) {
+	h.UpBPS += s.UpBPS
+	h.DownBPS += s.DownBPS
+	h.ActiveConnections += s.ActiveConnections
+	h.TodayUpBytes += s.TodayUpBytes
+	h.TodayDownBytes += s.TodayDownBytes
+	h.TotalUpBytes += s.TotalUpBytes
+	h.TotalDownBytes += s.TotalDownBytes
 }
 
 // parseTags splits a comma-separated tag field.

@@ -37,7 +37,7 @@ Web UI 由 Go `html/template` 服务端渲染 + 内嵌 htmx 实现,**无 Node/np
 ```bash
 cd deploy
 docker compose up -d
-# 初始密码:deploy/data/initial-admin-password.txt(登录后请删除该文件)
+# 首次访问面板时，在初始化页面设置管理员用户名和密码
 # 面板:http://<服务器>:42501
 ```
 
@@ -55,13 +55,12 @@ sudo mkdir -p /var/lib/sing-box-hub && sudo useradd -r panel
 sudo install -m 755 panel /usr/local/bin/panel
 sudo install -m 644 deploy/panel.service /etc/systemd/system/
 sudo systemctl enable --now panel
-# 初始密码:/var/lib/sing-box-hub/initial-admin-password.txt
+# 首次访问面板时，在初始化页面设置管理员用户名和密码
 ```
 
 配置优先级:命令行 flag > 环境变量 > YAML(`-config panel.yaml`) > 默认值。
 
-直接运行程序也会自动创建数据目录、密钥和管理员账号,初始随机密码写入数据目录中的
-`initial-admin-password.txt`。已有账号时重启不会重置密码,可删除该文件。
+直接运行程序会在首次访问时进入初始化页面，要求设置管理员用户名和密码。已有账号时重启不会重置密码。
 修改用户名或密码会撤销该用户全部会话;删除用户后,其访问令牌和刷新令牌立即失效。
 升级后旧访问令牌需通过有效刷新令牌续期,或重新登录。
 

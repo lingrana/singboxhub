@@ -76,6 +76,28 @@ func TestSelfPasswordResetInvalidatesCachedRefresh(t *testing.T) {
 	}
 }
 
+func TestProfileEditUpdatesUsernameAndRotatesSession(t *testing.T) {
+	e := newUIEnv(t)
+	cookies := userCookies(t, e)
+	edit := readBody(t, e.get(t, "/user/profile/edit", cookies, true))
+	if !strings.Contains(edit, `hx-post="/user/profile/edit"`) {
+		t.Fatal("profile edit form missing")
+	}
+	res := e.postForm(t, "/user/profile/edit", url.Values{
+		"username": {"澪染管理员"}, "new_password": {"updated-password"},
+	}, cookies)
+	if res.StatusCode != http.StatusOK || !strings.Contains(res.Header.Get("HX-Trigger"), "profile-updated") {
+		t.Fatalf("profile edit status=%d trigger=%q", res.StatusCode, res.Header.Get("HX-Trigger"))
+	}
+	if len(res.Cookies()) != 2 {
+		t.Fatalf("profile edit did not issue a replacement session")
+	}
+	profile := readBody(t, e.get(t, "/user/profile", res.Cookies(), true))
+	if !strings.Contains(profile, "澪染管理员") {
+		t.Fatalf("profile did not render updated username: %s", profile[:min(len(profile), 300)])
+	}
+}
+
 func TestMultipartBrandingPreservesBytesAndRefreshesPage(t *testing.T) {
 	e := newUIEnv(t)
 	cookies := userCookies(t, e)

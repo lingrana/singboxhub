@@ -22,14 +22,22 @@ func prepareDataDirs(cfg config.Config) error {
 	return nil
 }
 
-func initializeAdmin(st *store.Store, dir string) (bool, error) {
+func initializeAdmin(st *store.Store, dir string, setupCredentials ...string) (bool, error) {
 	n, err := st.CountUsers()
 	if err != nil || n > 0 {
 		return false, err
 	}
-	password, err := initialPassword(dir)
-	if err != nil {
-		return false, err
+	username := "admin"
+	password := ""
+	if len(setupCredentials) >= 2 {
+		username = setupCredentials[0]
+		password = setupCredentials[1]
+	}
+	if password == "" {
+		password, err = initialPassword(dir)
+		if err != nil {
+			return false, err
+		}
 	}
 	if len(password) < 6 || len(password) > 72 {
 		return false, errors.New("initial password must contain 6-72 bytes")
@@ -38,7 +46,7 @@ func initializeAdmin(st *store.Store, dir string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	_, err = st.CreateUser("admin", hash)
+	_, err = st.CreateUser(username, hash)
 	return err == nil, err
 }
 

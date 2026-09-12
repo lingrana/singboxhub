@@ -16,7 +16,7 @@
 
 {{define "frag_node_list"}}
 <div class="cards">
-  {{range .Nodes}}
+  {{range .HostNodes}}
   <div class="card node-card{{if not .Enabled}} off{{end}}">
     <div class="row">
       <span class="badge {{if .Online}}ok{{else}}bad{{end}}">{{if .Online}}在线{{else}}离线{{end}}</span>
@@ -33,6 +33,26 @@
       <span>↓ {{fmtBps .DownBPS}}</span>
       <span>{{.ActiveConnections}} 连接</span>
     </div>
+    <div class="metrics mono">
+      <span>今日 ↑ {{fmtBytes .TodayUpBytes}}</span>
+      <span>今日 ↓ {{fmtBytes .TodayDownBytes}}</span>
+    </div>
+    <div class="metrics mono muted">
+      <span>累计 ↑ {{fmtBytes .TotalUpBytes}}</span>
+      <span>累计 ↓ {{fmtBytes .TotalDownBytes}}</span>
+    </div>
+    {{if .ParsedNodes}}
+    <div class="node-children">
+      <div class="muted mono">解析节点 ({{len .ParsedNodes}})</div>
+      {{range .ParsedNodes}}
+      <div class="node-child-row">
+        <b>{{if .Name}}{{.Name}}{{else}}{{.ParsedName}}{{end}}</b>
+        {{if .ParsedType}}<span class="tag">{{.ParsedType}}</span>{{end}}
+        {{if .Server}}<span class="mono muted">{{.Server}}:{{.ServerPort}}</span>{{end}}
+      </div>
+      {{end}}
+    </div>
+    {{end}}
     <div class="muted">最近在线:{{fmtAgo .LastOnlineAt}}{{if .HasOutbound}} · 已配出站{{end}}</div>
     <div class="actions">
       <button type="button" hx-post="/admin/nodes/{{.ID}}/check">检查</button>
@@ -41,7 +61,7 @@
     </div>
   </div>
   {{end}}
-  {{if not .Nodes}}
+  {{if not .HostNodes}}
   <p class="muted">暂无主机。点击右上角「管理主机」,填入各 sing-box 的 Clash API 地址与 secret。</p>
   {{end}}
 </div>

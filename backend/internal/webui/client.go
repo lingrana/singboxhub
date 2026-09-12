@@ -156,6 +156,10 @@ type nodeCard struct {
 	Version           *string  `json:"version"`
 	Mode              *string  `json:"mode"`
 	LastOnlineAt      *string  `json:"last_online_at"`
+	ParsedType        string   `json:"parsed_type"`
+	ParsedName        string   `json:"parsed_name"`
+	Server            string   `json:"server"`
+	ServerPort        int      `json:"server_port"`
 }
 
 type nodeCardList struct {
@@ -165,6 +169,9 @@ type nodeCardList struct {
 type nodeSummary struct {
 	ID                string   `json:"id"`
 	Name              string   `json:"name"`
+	APIURL            string   `json:"api_url"`
+	ConfigImported    bool     `json:"config_imported"`
+	HostID            string   `json:"host_id"`
 	Tags              []string `json:"tags"`
 	Enabled           bool     `json:"enabled"`
 	Source            string   `json:"source"`
@@ -174,6 +181,10 @@ type nodeSummary struct {
 	DownBPS           int64    `json:"down_bps"`
 	ActiveConnections int      `json:"active_connections"`
 	LastOnlineAt      *string  `json:"last_online_at"`
+	ParsedType        string   `json:"parsed_type"`
+	ParsedName        string   `json:"parsed_name"`
+	Server            string   `json:"server"`
+	ServerPort        int      `json:"server_port"`
 }
 
 type nodeList struct {

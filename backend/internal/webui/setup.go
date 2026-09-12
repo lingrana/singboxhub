@@ -15,20 +15,30 @@ import (
 
 type setupResult struct {
 	selection config.DatabaseSelection
+	username  string
+	password  string
 	err       error
+}
+
+// SetupCredentials contains the administrator account selected during the
+// first-run setup flow. It is returned to the caller over the in-process
+// setup boundary and is never persisted in the setup selection file.
+type SetupCredentials struct {
+	Username string
+	Password string
 }
 
 // RunDatabaseSetup serves the first-run database selection page and returns
 // only after a database has been opened, migrated, and its choice persisted.
-func RunDatabaseSetup(ctx context.Context, listenAddr, dataDir string, logger *slog.Logger) (config.DatabaseSelection, error) {
+func RunDatabaseSetup(ctx context.Context, listenAddr, dataDir string, logger *slog.Logger) (config.DatabaseSelection, SetupCredentials, error) {
 	ln, err := net.Listen("tcp", listenAddr)
 	if err != nil {
-		return config.DatabaseSelection{}, err
+		return config.DatabaseSelection{}, SetupCredentials{}, err
 	}
 	rd, err := NewRenderer()
 	if err != nil {
 		_ = ln.Close()
-		return config.DatabaseSelection{}, err
+		return config.DatabaseSelection{}, SetupCredentials{}, err
 	}
 	result := make(chan setupResult, 1)
 	var once sync.Once
@@ -52,6 +62,21 @@ func RunDatabaseSetup(ctx context.Context, listenAddr, dataDir string, logger *s
 			Driver: strings.ToLower(strings.TrimSpace(r.FormValue("driver"))),
 			DSN:    strings.TrimSpace(r.FormValue("dsn")),
 		}
+		username := strings.TrimSpace(r.FormValue("username"))
+		password := r.FormValue("password")
+		confirmPassword := r.FormValue("confirm_password")
+		if username == "" || len([]rune(username)) > 64 {
+			renderSetupError(w, rd, defaultSQLite, "管理员用户名不能为空且不能超过 64 个字符")
+			return
+		}
+		if len([]rune(password)) < 6 || len([]byte(password)) > 72 {
+			renderSetupError(w, rd, defaultSQLite, "管理员密码需要 6-72 个字符")
+			return
+		}
+		if password != confirmPassword {
+			renderSetupError(w, rd, defaultSQLite, "两次输入的密码不一致")
+			return
+		}
 		if selection.Driver == "sqlite" && selection.DSN == "" {
 			selection.DSN = defaultSQLite
 		}
@@ -73,7 +98,7 @@ func RunDatabaseSetup(ctx context.Context, listenAddr, dataDir string, logger *s
 			renderSetupError(w, rd, defaultSQLite, "无法保存数据库选择："+redactDSN(selection.DSN, err.Error()))
 			return
 		}
-		once.Do(func() { result <- setupResult{selection: selection} })
+		once.Do(func() { result <- setupResult{selection: selection, username: username, password: password} })
 		securityHeaders(w)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_, _ = w.Write([]byte("<!doctype html><meta charset=\"utf-8\"><title>初始化完成</title><meta http-equiv=\"refresh\" content=\"2;url=/login\"><p>数据库初始化完成，正在启动面板，即将跳转到登录页…</p>"))
@@ -93,10 +118,10 @@ func RunDatabaseSetup(ctx context.Context, listenAddr, dataDir string, logger *s
 	select {
 	case outcome := <-result:
 		_ = server.Shutdown(context.Background())
-		return outcome.selection, outcome.err
+		return outcome.selection, SetupCredentials{Username: outcome.username, Password: outcome.password}, outcome.err
 	case <-ctx.Done():
 		_ = server.Shutdown(context.Background())
-		return config.DatabaseSelection{}, ctx.Err()
+		return config.DatabaseSelection{}, SetupCredentials{}, ctx.Err()
 	}
 }
 

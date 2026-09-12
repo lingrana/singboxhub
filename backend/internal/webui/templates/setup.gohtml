@@ -12,9 +12,18 @@
   <section class="setup-panel">
     <p class="eyebrow mono">澪 / FIRST RUN</p>
     <h1>初始化数据库</h1>
-    <p class="setup-lead">选择面板的数据存储。SQLite 适合单机部署，PostgreSQL 适合多实例或集中式部署。</p>
+    <p class="setup-lead">选择数据存储，并设置首次登录使用的管理员账号。</p>
     {{if .Error}}<p class="error mono">{{.Error}}</p>{{end}}
     <form method="post" action="/setup" class="setup-form">
+      <fieldset>
+        <legend class="mono">ADMINISTRATOR</legend>
+        <label for="setup-username" class="mono">管理员用户名</label>
+        <input id="setup-username" name="username" required maxlength="64" autocomplete="username">
+        <label for="setup-password" class="mono">管理员密码</label>
+        <input id="setup-password" name="password" type="password" required minlength="6" maxlength="72" autocomplete="new-password">
+        <label for="setup-confirm-password" class="mono">确认管理员密码</label>
+        <input id="setup-confirm-password" name="confirm_password" type="password" required minlength="6" maxlength="72" autocomplete="new-password">
+      </fieldset>
       <fieldset>
         <legend class="mono">DATABASE ENGINE</legend>
         <label class="setup-choice"><input type="radio" name="driver" value="sqlite" checked> <span>SQLite</span><small>本地文件，零外部服务</small></label>

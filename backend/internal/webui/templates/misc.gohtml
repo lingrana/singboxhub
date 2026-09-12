@@ -352,7 +352,7 @@ document.querySelector('#sub-filter button.active').click();
 {{end}}
 
 {{define "frag_user_profile"}}
-<div class="modal-mask user-modal-mask">
+<div class="modal-mask user-modal-mask" id="profile-modal">
   <div class="modal user-modal profile-modal" role="dialog" aria-modal="true" aria-labelledby="profile-title">
     <div class="profile-header">
       <span class="profile-avatar">{{slice .Username 0 1}}</span>

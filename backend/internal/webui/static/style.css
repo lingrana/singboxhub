@@ -845,6 +845,21 @@ h2, h3 {
   color: var(--muted-fg);
 }
 
+.node-children {
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+  display: grid;
+  gap: 6px;
+}
+
+.node-child-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+
 .actions {
   display: flex;
   gap: 6px;

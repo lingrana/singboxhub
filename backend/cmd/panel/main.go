@@ -46,7 +46,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	db, err := openStore(ctx, cfg, logger)
+	db, setupCreds, err := openStore(ctx, cfg, logger)
 	if err != nil {
 		slog.Error("open database", "error", err)
 		os.Exit(1)
@@ -65,7 +65,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	created, err := initializeAdmin(db, cfg.DataDir)
+	created, err := initializeAdmin(db, cfg.DataDir, setupCreds.Username, setupCreds.Password)
 	if err != nil {
 		logger.Error("initialize admin", "error", err)
 		os.Exit(1)
@@ -108,40 +108,45 @@ func main() {
 	hub.Stop()
 }
 
-func openStore(ctx context.Context, cfg config.Config, logger *slog.Logger) (*store.Store, error) {
+func openStore(ctx context.Context, cfg config.Config, logger *slog.Logger) (*store.Store, webui.SetupCredentials, error) {
 	if cfg.DBDriver != "" {
 		dsn := cfg.DBDSN
 		if cfg.DBDriver == "sqlite" && dsn == "" {
 			dsn = cfg.DBPath
 		}
-		return store.OpenWithConfig(cfg.DBDriver, dsn)
+		db, err := store.OpenWithConfig(cfg.DBDriver, dsn)
+		return db, webui.SetupCredentials{}, err
 	}
 	if cfg.DBDSN != "" {
-		return nil, fmt.Errorf("db_dsn requires db_driver")
+		return nil, webui.SetupCredentials{}, fmt.Errorf("db_dsn requires db_driver")
 	}
 	selection, exists, err := config.LoadDatabaseSelection(cfg.DataDir)
 	if err != nil {
-		return nil, err
+		return nil, webui.SetupCredentials{}, err
 	}
 	defaultPath := filepath.Clean(filepath.Join(cfg.DataDir, "panel.db"))
 	legacyPath := filepath.Clean(cfg.DBPath)
 	if exists {
-		return store.OpenWithConfig(selection.Driver, selection.DSN)
+		db, err := store.OpenWithConfig(selection.Driver, selection.DSN)
+		return db, webui.SetupCredentials{}, err
 	}
 	if legacyPath != defaultPath {
-		return store.Open(cfg.DBPath)
+		db, err := store.Open(cfg.DBPath)
+		return db, webui.SetupCredentials{}, err
 	}
 	if _, err := os.Stat(defaultPath); err == nil {
-		return store.Open(defaultPath)
+		db, err := store.Open(defaultPath)
+		return db, webui.SetupCredentials{}, err
 	} else if !os.IsNotExist(err) {
-		return nil, err
+		return nil, webui.SetupCredentials{}, err
 	}
 	logger.Info("database is not configured; waiting for first-run setup", "listen", cfg.ListenAddr)
-	selection, err = webui.RunDatabaseSetup(ctx, cfg.ListenAddr, cfg.DataDir, logger)
+	selection, credentials, err := webui.RunDatabaseSetup(ctx, cfg.ListenAddr, cfg.DataDir, logger)
 	if err != nil {
-		return nil, err
+		return nil, webui.SetupCredentials{}, err
 	}
-	return store.OpenWithConfig(selection.Driver, selection.DSN)
+	db, err := store.OpenWithConfig(selection.Driver, selection.DSN)
+	return db, credentials, err
 }
 
 func extractPassword(raw string) string {

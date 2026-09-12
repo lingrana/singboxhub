@@ -1327,7 +1327,26 @@ func (u *UI) handleUserProfileEdit(w http.ResponseWriter, r *http.Request) {
 	}
 	res := u.apiSend(r, token, http.MethodPatch, "/users/"+claims.Subject, payload, nil)
 	if res.Status == http.StatusOK {
-		hxTrigger(w, toastOK("个人信息已更新"))
+		var updated struct {
+			Username string `json:"username"`
+		}
+		if err := res.Decode(&updated); err != nil || updated.Username == "" {
+			hxTrigger(w, toastErr("个人信息更新响应异常"))
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		// Updating a user revokes every previous refresh token. Issue a new
+		// browser session immediately so a username/password change does not
+		// strand the current page on an invalidated session.
+		pair, err := u.auth.Issue(claims.UserID(), updated.Username, claims.Role)
+		if err != nil {
+			hxTrigger(w, toastErr("会话刷新失败,请重新登录"))
+			clearSessionCookies(w)
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		setSessionCookies(w, r, pair)
+		hxTrigger(w, mergeEvents(toastOK("个人信息已更新"), map[string]any{"profile-updated": ""}))
 		w.WriteHeader(http.StatusOK)
 		return
 	}

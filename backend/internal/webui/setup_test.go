@@ -35,7 +35,7 @@ func startSetup(t *testing.T, addr string) (base string, stop func()) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() {
-		_, err := webui.RunDatabaseSetup(ctx, addr, t.TempDir(), quietLogger())
+		_, _, err := webui.RunDatabaseSetup(ctx, addr, t.TempDir(), quietLogger())
 		done <- err
 	}()
 	base = "http://" + addr
@@ -111,7 +111,10 @@ func TestSetupPostgresFailureShowsDetail(t *testing.T) {
 	closed := freeAddress(t) // port with no listener
 	dsn := "postgres://user:pass@" + closed + "/singhub?sslmode=disable"
 
-	form := strings.NewReader(url.Values{"driver": {"postgres"}, "dsn": {dsn}}.Encode())
+	form := strings.NewReader(url.Values{
+		"driver": {"postgres"}, "dsn": {dsn}, "username": {"admin"},
+		"password": {"test-password"}, "confirm_password": {"test-password"},
+	}.Encode())
 	req, err := http.NewRequest(http.MethodPost, base+"/setup", form)
 	if err != nil {
 		t.Fatal(err)
