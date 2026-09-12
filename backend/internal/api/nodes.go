@@ -144,6 +144,7 @@ func (s *Server) summaryItem(n *store.Node) map[string]any {
 		"tags":               n.Tags,
 		"enabled":            n.Enabled,
 		"source":             n.Source,
+		"mode":               n.Mode,
 		"online":             status.Online,
 		"has_outbound":       n.OutboundEnc != "",
 		"up_bps":             status.UpBPS,
@@ -434,9 +435,14 @@ func (s *Server) importProxiesForNode(ctx context.Context, anchor *store.Node, k
 			s.rollbackCreatedNodes(createdNodeIDs)
 			return nil, err
 		}
+		mode := parsed.Modes[proxy.Name]
+		if mode == "" {
+			mode = "rule"
+		}
 		if cur, ok := prevByName[proxy.Name]; ok {
-			if curPlain, derr := cryptox.Decrypt(s.cryptoKey, cur.OutboundEnc); derr != nil || curPlain != proxy.Outbound {
+			if curPlain, derr := cryptox.Decrypt(s.cryptoKey, cur.OutboundEnc); derr != nil || curPlain != proxy.Outbound || cur.Mode != mode {
 				cur.OutboundEnc = enc
+				cur.Mode = mode
 				if err := s.store.UpdateNode(cur); err != nil {
 					// Rollback created nodes on failure
 					s.rollbackCreatedNodes(createdNodeIDs)
@@ -451,6 +457,7 @@ func (s *Server) importProxiesForNode(ctx context.Context, anchor *store.Node, k
 			Name:        s.uniqueNodeName(proxy.Name),
 			OutboundEnc: enc,
 			Source:      nodeSource(anchor.ID),
+			Mode:        mode,
 			Enabled:     anchor.Enabled,
 			Tags:        append([]string{}, anchor.Tags...),
 		}

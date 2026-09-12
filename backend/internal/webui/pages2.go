@@ -316,6 +316,9 @@ type subNodeRow struct {
 	Source bool
 	Online bool
 	Mode   string
+	Type   string
+	Server string
+	Port   int
 }
 
 // ModeGroup buckets a node into the subscription-page classification.
@@ -366,12 +369,7 @@ func buildSubNodeGroups(rows []subNodeRow) subNodesBody {
 
 func (u *UI) pageSubscription(w http.ResponseWriter, r *http.Request) {
 	token, _ := ctxToken(r.Context())
-	body, err := u.buildSubscription(r, token, r.URL.Query().Get("format"))
-	if err != nil {
-		u.renderFrag(w, "frag_error", fragErr{Message: "订阅加载失败:" + err.Error()})
-		return
-	}
-	body.Nodes = buildSubNodeGroups(u.fetchSubNodes(r, token))
+	body := subBody{Nodes: buildSubNodeGroups(u.fetchSubNodes(r, token))}
 	body.Base = u.rd.base("subscription", "订阅 · sing-box hub", u.usernameOf(r), u.themeOf(r))
 	u.renderPage(w, r, "subscription", "订阅 · sing-box hub", body)
 }
@@ -389,22 +387,83 @@ func (u *UI) fetchSubNodes(r *http.Request, token string) []subNodeRow {
 	if _, err := u.apiGetJSON(r, token, "/nodes?page_size=100", &list); err != nil {
 		return nil
 	}
+	hostNames := make(map[string]string, len(list.Items))
+	for _, n := range list.Items {
+		if n.Source == "" {
+			hostNames[n.ID] = n.Name
+		} else {
+			hostNames[n.ID] = importedNameBase(n)
+		}
+	}
 	rows := make([]subNodeRow, 0, len(list.Items))
 	for _, n := range list.Items {
 		if !n.Enabled || !n.HasOutbound {
 			continue
 		}
 		stat := byID[n.ID]
-		mode := ""
-		if stat.Mode != nil {
+		mode := n.Mode
+		if mode == "" && stat.Mode != nil {
 			mode = *stat.Mode
 		}
+		if mode == "" && n.ParsedName != "" {
+			// Legacy fallback: infer mode from ParsedName suffix
+			mode = inferModeFromName(n.ParsedName)
+		}
+		if mode == "" {
+			mode = "rule"
+		}
+		name := n.Name
+		if n.ParsedType != "" {
+			// Node with outbound: format as baseName-Protocol
+			base := hostNames[n.ID]
+			name = base + "-" + protocolLabel(n.ParsedType)
+		}
 		rows = append(rows, subNodeRow{
-			ID: n.ID, Name: n.Name, Source: n.Source != "",
+			ID: n.ID, Name: name, Source: n.Source != "",
 			Online: statsErr == nil && stat.Online, Mode: mode,
+			Type: n.ParsedType, Server: n.Server, Port: n.ServerPort,
 		})
 	}
 	return rows
+}
+
+// importedNameBase prefers the parsed host label (for example
+// KataBump-Direct) and removes its final group suffix. The subscription list
+// then appends the actual outbound protocol to produce names such as
+// KataBump-Vless and KataBump-Trojan.
+func importedNameBase(n nodeSummary) string {
+	name := strings.TrimSpace(n.ParsedName)
+	if name == "" {
+		return n.Name
+	}
+	if i := strings.LastIndex(name, "-"); i > 0 {
+		name = name[:i]
+	}
+	return name
+}
+
+// inferModeFromName extracts mode (rule/global/direct) from the final
+// segment of an imported proxy name like "KataBump-Direct".
+func inferModeFromName(parsedName string) string {
+	name := strings.TrimSpace(parsedName)
+	if name == "" {
+		return "rule"
+	}
+	if i := strings.LastIndex(name, "-"); i > 0 {
+		suffix := strings.ToLower(strings.TrimSpace(name[i+1:]))
+		switch suffix {
+		case "rule", "global", "direct":
+			return suffix
+		}
+	}
+	return "rule"
+}
+
+func protocolLabel(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	return strings.ToUpper(raw[:1]) + raw[1:]
 }
 
 // fragSubNodes renders the user-available nodes card: every panel node with

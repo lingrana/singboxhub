@@ -175,6 +175,7 @@ type nodeSummary struct {
 	Tags              []string `json:"tags"`
 	Enabled           bool     `json:"enabled"`
 	Source            string   `json:"source"`
+	Mode              string   `json:"mode"`
 	Online            bool     `json:"online"`
 	HasOutbound       bool     `json:"has_outbound"`
 	UpBPS             int64    `json:"up_bps"`
