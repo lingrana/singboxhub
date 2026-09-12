@@ -335,16 +335,21 @@ type subscription struct {
 }
 
 type settingsView struct {
-	SamplerIntervalSeconds int    `json:"sampler_interval_seconds"`
-	RetentionDays          int    `json:"retention_days"`
-	IPLookupEnabled        bool   `json:"ip_lookup_enabled"`
-	IPLookupProviderURL    string `json:"ip_lookup_provider_url"`
-	SingboxBinPath         string `json:"singbox_bin_path"`
-	BrandName              string `json:"brand_name"`
-	ResetCooldownMinutes   int    `json:"reset_cooldown_minutes"`
-	FaviconURL             string `json:"favicon_url,omitempty"`
-	LogoURL                string `json:"logo_url,omitempty"`
-	UpdatedAt              string `json:"updated_at"`
+	SamplerIntervalSeconds     int    `json:"sampler_interval_seconds"`
+	RetentionDays              int    `json:"retention_days"`
+	IPLookupEnabled            bool   `json:"ip_lookup_enabled"`
+	IPLookupProviderURL        string `json:"ip_lookup_provider_url"`
+	SingboxBinPath             string `json:"singbox_bin_path"`
+	BrandName                  string `json:"brand_name"`
+	ResetCooldownMinutes       int    `json:"reset_cooldown_minutes"`
+	ICMPMonitorEnabled         bool   `json:"icmp_monitor_enabled"`
+	ICMPMonitorTarget          string `json:"icmp_monitor_target"`
+	ICMPMonitorIntervalSeconds int    `json:"icmp_monitor_interval_seconds"`
+	ICMPAutoDisableThresholdMs int    `json:"icmp_auto_disable_threshold_ms"`
+	ICMPAutoDisableConsecutive int    `json:"icmp_auto_disable_consecutive"`
+	FaviconURL                 string `json:"favicon_url,omitempty"`
+	LogoURL                    string `json:"logo_url,omitempty"`
+	UpdatedAt                  string `json:"updated_at"`
 }
 
 type sessionTokens struct {

@@ -998,12 +998,17 @@ func (u *UI) handleSettingsSave(w http.ResponseWriter, r *http.Request) {
 	}
 	etag := r.PostFormValue("etag")
 	payload := map[string]any{
-		"sampler_interval_seconds": atoiOr(r.PostFormValue("sampler_interval_seconds"), 5),
-		"retention_days":           atoiOr(r.PostFormValue("retention_days"), 30),
-		"ip_lookup_enabled":        r.PostFormValue("ip_lookup_enabled") == "on",
-		"ip_lookup_provider_url":   strings.TrimSpace(r.PostFormValue("ip_lookup_provider_url")),
-		"brand_name":               strings.TrimSpace(r.PostFormValue("brand_name")),
-		"reset_cooldown_minutes":   atoiOr(r.PostFormValue("reset_cooldown_minutes"), 10),
+		"sampler_interval_seconds":      atoiOr(r.PostFormValue("sampler_interval_seconds"), 5),
+		"retention_days":                atoiOr(r.PostFormValue("retention_days"), 30),
+		"ip_lookup_enabled":             r.PostFormValue("ip_lookup_enabled") == "on",
+		"ip_lookup_provider_url":        strings.TrimSpace(r.PostFormValue("ip_lookup_provider_url")),
+		"brand_name":                    strings.TrimSpace(r.PostFormValue("brand_name")),
+		"reset_cooldown_minutes":        atoiOr(r.PostFormValue("reset_cooldown_minutes"), 10),
+		"icmp_monitor_enabled":          r.PostFormValue("icmp_monitor_enabled") == "on",
+		"icmp_monitor_target":           strings.TrimSpace(r.PostFormValue("icmp_monitor_target")),
+		"icmp_monitor_interval_seconds": atoiOr(r.PostFormValue("icmp_monitor_interval_seconds"), 60),
+		"icmp_auto_disable_threshold_ms": atoiOr(r.PostFormValue("icmp_auto_disable_threshold_ms"), 2000),
+		"icmp_auto_disable_consecutive": atoiOr(r.PostFormValue("icmp_auto_disable_consecutive"), 3),
 	}
 	if v := strings.TrimSpace(r.PostFormValue("singbox_bin_path")); v != "" {
 		payload["singbox_bin_path"] = v
