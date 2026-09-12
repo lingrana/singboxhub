@@ -311,14 +311,17 @@ type subBody struct {
 
 // subNodeRow is one manageable entry of the user-available node list.
 type subNodeRow struct {
-	ID     string
-	Name   string
-	Source bool
-	Online bool
-	Mode   string
-	Type   string
-	Server string
-	Port   int
+	ID              string
+	Name            string
+	Source          bool
+	Online          bool
+	Enabled         bool
+	Mode            string
+	Type            string
+	Server          string
+	Port            int
+	LatencyMs       int
+	LatencyFailCount int
 }
 
 // ModeGroup buckets a node into the subscription-page classification.
@@ -428,8 +431,9 @@ func (u *UI) fetchSubNodes(r *http.Request, token string) []subNodeRow {
 		}
 		rows = append(rows, subNodeRow{
 			ID: n.ID, Name: name, Source: n.Source != "",
-			Online: statsErr == nil && stat.Online, Mode: mode,
+			Online: statsErr == nil && stat.Online, Enabled: n.Enabled, Mode: mode,
 			Type: n.ParsedType, Server: n.Server, Port: n.ServerPort,
+			LatencyMs: n.LatencyMs, LatencyFailCount: n.LatencyFailCount,
 		})
 	}
 	return rows
