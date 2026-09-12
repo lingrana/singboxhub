@@ -479,8 +479,33 @@ func (s *Store) migratePostgres() error {
 		_, err := s.db.Exec(`INSERT INTO schema_version (version) VALUES ($1)`, len(migrations))
 		return err
 	}
-	if current < len(migrations) {
-		return fmt.Errorf("postgres schema version %d is older than supported version %d; migrate it before starting", current, len(migrations))
+
+	// Apply pending migrations for existing databases
+	for v := current; v < len(migrations); v++ {
+		tx, err := s.begin()
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(migrations[v]); err != nil {
+			// Ignore duplicate column errors - the column might already exist from postgresSchema
+			if strings.Contains(err.Error(), "already exists") || strings.Contains(err.Error(), "duplicate") {
+				_ = tx.Rollback()
+				if _, insertErr := s.db.Exec(`INSERT INTO schema_version (version) VALUES ($1)`, v+1); insertErr != nil {
+					return insertErr
+				}
+			} else {
+				_ = tx.Rollback()
+				return fmt.Errorf("migration %d: %w", v+1, err)
+			}
+		} else {
+			if _, err := tx.Exec(`INSERT INTO schema_version (version) VALUES ($1)`, v+1); err != nil {
+				_ = tx.Rollback()
+				return err
+			}
+			if err := tx.Commit(); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }
