@@ -146,17 +146,22 @@ func (s *Store) SetResetNow(userID int64) error {
 
 // Settings is the singleton panel configuration row.
 type Settings struct {
-	SamplerIntervalSeconds int
-	RetentionDays          int
-	IPLookupEnabled        bool
-	IPLookupProviderURL    string
-	SingboxBinPath         string
-	Favicon                []byte
-	Logo                   []byte
-	BrandName              string
-	ResetCooldownMinutes   int
-	UpdatedAt              int64
-	Revision               int64
+	SamplerIntervalSeconds         int
+	RetentionDays                  int
+	IPLookupEnabled                bool
+	IPLookupProviderURL            string
+	SingboxBinPath                 string
+	Favicon                        []byte
+	Logo                           []byte
+	BrandName                      string
+	ResetCooldownMinutes           int
+	ICMPMonitorEnabled             bool
+	ICMPMonitorTarget              string
+	ICMPMonitorIntervalSeconds     int
+	ICMPAutoDisableThresholdMs     int
+	ICMPAutoDisableConsecutive     int
+	UpdatedAt                      int64
+	Revision                       int64
 }
 
 // GetSettings loads the singleton, inserting defaults on first use.
@@ -174,8 +179,11 @@ func (s *Store) GetSettings(def SamplerDefaults) (*Settings, error) {
 	var favicon, logo []byte
 	var brandName string
 	var cooldownMinutes int
-	err = s.queryRow(`SELECT sampler_interval_seconds, retention_days, ip_lookup_enabled, ip_lookup_provider_url, singbox_bin_path, favicon, logo, brand_name, COALESCE(reset_cooldown_minutes, 10), updated_at, revision
-		FROM settings WHERE id = 1`).Scan(&st.SamplerIntervalSeconds, &st.RetentionDays, &enabled, &st.IPLookupProviderURL, &binPath, &favicon, &logo, &brandName, &cooldownMinutes, &st.UpdatedAt, &st.Revision)
+	var icmpEnabled int
+	var icmpTarget string
+	var icmpInterval, icmpThreshold, icmpConsecutive int
+	err = s.queryRow(`SELECT sampler_interval_seconds, retention_days, ip_lookup_enabled, ip_lookup_provider_url, singbox_bin_path, favicon, logo, brand_name, COALESCE(reset_cooldown_minutes, 10), COALESCE(icmp_monitor_enabled, 0), COALESCE(icmp_monitor_target, '8.8.8.8'), COALESCE(icmp_monitor_interval_seconds, 60), COALESCE(icmp_auto_disable_threshold_ms, 2000), COALESCE(icmp_auto_disable_consecutive, 3), updated_at, revision
+		FROM settings WHERE id = 1`).Scan(&st.SamplerIntervalSeconds, &st.RetentionDays, &enabled, &st.IPLookupProviderURL, &binPath, &favicon, &logo, &brandName, &cooldownMinutes, &icmpEnabled, &icmpTarget, &icmpInterval, &icmpThreshold, &icmpConsecutive, &st.UpdatedAt, &st.Revision)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -188,6 +196,11 @@ func (s *Store) GetSettings(def SamplerDefaults) (*Settings, error) {
 	st.Logo = logo
 	st.BrandName = brandName
 	st.ResetCooldownMinutes = cooldownMinutes
+	st.ICMPMonitorEnabled = icmpEnabled != 0
+	st.ICMPMonitorTarget = icmpTarget
+	st.ICMPMonitorIntervalSeconds = icmpInterval
+	st.ICMPAutoDisableThresholdMs = icmpThreshold
+	st.ICMPAutoDisableConsecutive = icmpConsecutive
 	return &st, nil
 }
 
@@ -197,8 +210,8 @@ var ErrSettingsConflict = errors.New("settings revision changed")
 // UpdateSettings persists mutable fields only if the loaded revision is current.
 func (s *Store) UpdateSettings(st *Settings) error {
 	now := time.Now().Unix()
-	res, err := s.exec(`UPDATE settings SET sampler_interval_seconds = ?, retention_days = ?, ip_lookup_enabled = ?, ip_lookup_provider_url = ?, singbox_bin_path = ?, brand_name = ?, reset_cooldown_minutes = ?, updated_at = ?, revision = revision + 1 WHERE id = 1 AND revision = ?`,
-		st.SamplerIntervalSeconds, st.RetentionDays, boolInt(st.IPLookupEnabled), st.IPLookupProviderURL, st.SingboxBinPath, st.BrandName, st.ResetCooldownMinutes, now, st.Revision)
+	res, err := s.exec(`UPDATE settings SET sampler_interval_seconds = ?, retention_days = ?, ip_lookup_enabled = ?, ip_lookup_provider_url = ?, singbox_bin_path = ?, brand_name = ?, reset_cooldown_minutes = ?, icmp_monitor_enabled = ?, icmp_monitor_target = ?, icmp_monitor_interval_seconds = ?, icmp_auto_disable_threshold_ms = ?, icmp_auto_disable_consecutive = ?, updated_at = ?, revision = revision + 1 WHERE id = 1 AND revision = ?`,
+		st.SamplerIntervalSeconds, st.RetentionDays, boolInt(st.IPLookupEnabled), st.IPLookupProviderURL, st.SingboxBinPath, st.BrandName, st.ResetCooldownMinutes, boolInt(st.ICMPMonitorEnabled), st.ICMPMonitorTarget, st.ICMPMonitorIntervalSeconds, st.ICMPAutoDisableThresholdMs, st.ICMPAutoDisableConsecutive, now, st.Revision)
 	if err != nil {
 		return err
 	}

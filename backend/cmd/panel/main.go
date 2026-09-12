@@ -17,6 +17,7 @@ import (
 	"github.com/sing-hub/panel/internal/auth"
 	"github.com/sing-hub/panel/internal/config"
 	"github.com/sing-hub/panel/internal/cryptox"
+	"github.com/sing-hub/panel/internal/monitor"
 	"github.com/sing-hub/panel/internal/sampler"
 	"github.com/sing-hub/panel/internal/store"
 	"github.com/sing-hub/panel/internal/webui"
@@ -84,8 +85,10 @@ func main() {
 
 	authMgr := auth.NewManager(jwtKey, cfg.Session.AccessTokenTTL, cfg.Session.RefreshTokenTTL, db)
 	hub := sampler.NewHub(db, cryptoKey, logger, cfg.Sampler.PersistInterval)
+	mon := monitor.NewMonitor(db, cryptoKey, logger)
 
 	hub.Start(ctx)
+	mon.Start(ctx)
 
 	srv := api.NewServer(cfg, logger, db, cryptoKey, authMgr, hub)
 	handler := srv.Routes()
@@ -106,6 +109,7 @@ func main() {
 		logger.Error("server error", "error", err)
 	}
 	hub.Stop()
+	mon.Stop()
 }
 
 func openStore(ctx context.Context, cfg config.Config, logger *slog.Logger) (*store.Store, webui.SetupCredentials, error) {

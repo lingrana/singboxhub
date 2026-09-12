@@ -368,6 +368,7 @@ func (s *Server) handleStatsOverview(w http.ResponseWriter, r *http.Request) {
 
 // handleStatsNodes implements GET /stats/nodes: per-node dashboard cards
 // (live rates, today's traffic, memory, version/mode) in one call.
+// Only returns host nodes (source == ""), not imported proxy nodes.
 func (s *Server) handleStatsNodes(w http.ResponseWriter, r *http.Request) {
 	nodes, err := s.store.ListNodes()
 	if err != nil {
@@ -380,6 +381,10 @@ func (s *Server) handleStatsNodes(w http.ResponseWriter, r *http.Request) {
 	items := make([]map[string]any, 0, len(nodes))
 	for i := range nodes {
 		n := &nodes[i]
+		// Skip imported nodes, only show host nodes
+		if n.Source != "" {
+			continue
+		}
 		status, known := s.hub.Status(n.ID)
 		var todayUp, todayDown int64
 		if u, d, err := s.store.SumRange(n.ID, todayStart, now.Unix()); err == nil {

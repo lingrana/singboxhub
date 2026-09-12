@@ -110,7 +110,6 @@ func (u *UI) Register(mux *http.ServeMux) {
 	mux.Handle("GET /admin/subscription/qrcode", u.uiAuth(u.handleSubscriptionQR))
 	mux.Handle("POST /admin/subscription/revoke", u.uiAuth(u.handleSubscriptionRevoke))
 	mux.Handle("GET /admin/subscription/nodes", u.uiAuth(u.fragSubNodes))
-	mux.Handle("POST /admin/nodes/{node_id}/latency", u.uiAuth(u.handleSubNodeLatency))
 
 	mux.Handle("GET /admin/settings", u.uiAuth(u.pageSettings))
 	mux.Handle("POST /admin/settings", u.uiAuth(u.handleSettingsSave))

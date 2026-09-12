@@ -325,6 +325,16 @@ CREATE TABLE IF NOT EXISTS upstream_subscriptions (
 );`,
 	// 10: add mode column to nodes for Clash proxy-group classification
 	`ALTER TABLE nodes ADD COLUMN mode TEXT NOT NULL DEFAULT '';`,
+	// 11: add ICMP latency monitoring fields to settings
+	`ALTER TABLE settings ADD COLUMN icmp_monitor_enabled INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE settings ADD COLUMN icmp_monitor_target TEXT NOT NULL DEFAULT '8.8.8.8';
+ALTER TABLE settings ADD COLUMN icmp_monitor_interval_seconds INTEGER NOT NULL DEFAULT 60;
+ALTER TABLE settings ADD COLUMN icmp_auto_disable_threshold_ms INTEGER NOT NULL DEFAULT 2000;
+ALTER TABLE settings ADD COLUMN icmp_auto_disable_consecutive INTEGER NOT NULL DEFAULT 3;`,
+	// 12: add latency monitoring state to nodes
+	`ALTER TABLE nodes ADD COLUMN latency_ms INTEGER NOT NULL DEFAULT -1;
+ALTER TABLE nodes ADD COLUMN latency_checked_at INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE nodes ADD COLUMN latency_fail_count INTEGER NOT NULL DEFAULT 0;`,
 }
 
 func (s *Store) migrate() error {
@@ -387,7 +397,10 @@ CREATE TABLE IF NOT EXISTS nodes (
   remark TEXT NOT NULL DEFAULT '', created_at BIGINT NOT NULL, updated_at BIGINT NOT NULL,
   last_online_at BIGINT NOT NULL DEFAULT 0, source TEXT NOT NULL DEFAULT '',
   config_url TEXT NOT NULL DEFAULT '', kce_key_enc TEXT NOT NULL DEFAULT '',
-  mode TEXT NOT NULL DEFAULT ''
+  mode TEXT NOT NULL DEFAULT '',
+  latency_ms INTEGER NOT NULL DEFAULT -1,
+  latency_checked_at BIGINT NOT NULL DEFAULT 0,
+  latency_fail_count INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS traffic_samples (
   node_id TEXT NOT NULL REFERENCES nodes(id) ON DELETE CASCADE, ts BIGINT NOT NULL,
@@ -437,7 +450,12 @@ CREATE TABLE IF NOT EXISTS settings (
   ip_lookup_provider_url TEXT NOT NULL DEFAULT '', singbox_bin_path TEXT NOT NULL DEFAULT '',
   updated_at BIGINT NOT NULL, favicon BYTEA, logo BYTEA, revision BIGINT NOT NULL DEFAULT 1,
 	brand_name TEXT NOT NULL DEFAULT 'sing-box hub',
-  reset_cooldown_minutes INTEGER NOT NULL DEFAULT 10
+  reset_cooldown_minutes INTEGER NOT NULL DEFAULT 10,
+  icmp_monitor_enabled INTEGER NOT NULL DEFAULT 0,
+  icmp_monitor_target TEXT NOT NULL DEFAULT '8.8.8.8',
+  icmp_monitor_interval_seconds INTEGER NOT NULL DEFAULT 60,
+  icmp_auto_disable_threshold_ms INTEGER NOT NULL DEFAULT 2000,
+  icmp_auto_disable_consecutive INTEGER NOT NULL DEFAULT 3
 );
 CREATE TABLE IF NOT EXISTS upstream_subscriptions (
   id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, url TEXT NOT NULL, key_enc TEXT NOT NULL DEFAULT '',

@@ -467,32 +467,6 @@ func (u *UI) fragSubNodes(w http.ResponseWriter, r *http.Request) {
 	u.renderFrag(w, "frag_sub_nodes", buildSubNodeGroups(u.fetchSubNodes(r, token)))
 }
 
-// handleSubNodeLatency runs a latency test from the subscription page and
-// reports the result as a toast.
-func (u *UI) handleSubNodeLatency(w http.ResponseWriter, r *http.Request) {
-	token, _ := ctxToken(r.Context())
-	if !u.requireForm(w, r) {
-		return
-	}
-	nodeID := r.PathValue("node_id")
-	res := u.apiSend(r, token, http.MethodPost, "/nodes/"+url.PathEscape(nodeID)+"/latency", nil, nil)
-	if res.Status != http.StatusOK {
-		hxTrigger(w, toastErr("延迟测试失败:"+res.ProblemDetail()))
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
-	var out struct {
-		LatencyMS int64 `json:"latency_ms"`
-	}
-	if err := res.Decode(&out); err != nil {
-		hxTrigger(w, toastErr("延迟测试响应异常"))
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
-	hxTrigger(w, toastOK(fmt.Sprintf("延迟 %d ms", out.LatencyMS)))
-	w.WriteHeader(http.StatusNoContent)
-}
-
 func (u *UI) buildSubscription(r *http.Request, token, format string) (subBody, error) {
 	body := subBody{Format: normalizeSubFormat(format)}
 	var sub subscription

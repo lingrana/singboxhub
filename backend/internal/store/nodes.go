@@ -16,25 +16,38 @@ var ErrNotFound = errors.New("not found")
 // 'sub:<id>' imported from an upstream subscription); ConfigURL/KCEKeyEnc
 // keep the encrypted-config import settings for later re-imports.
 type Node struct {
-	ID           string
-	Name         string
-	APIURL       string
-	APISecretEnc string
-	OutboundEnc  string
-	Source       string
-	ConfigURL    string
-	KCEKeyEnc    string
-	Tags         []string
-	Enabled      bool
-	Remark       string
-	Mode         string // rule/global/direct from Clash proxy-groups
-	CreatedAt    int64
-	UpdatedAt    int64
-	LastOnline   int64 // 0 = never
-	HasLastOnl   bool
+	ID              string
+	Name            string
+	APIURL          string
+	APISecretEnc    string
+	OutboundEnc     string
+	Source          string
+	ConfigURL       string
+	KCEKeyEnc       string
+	Tags            []string
+	Enabled         bool
+	Remark          string
+	Mode            string // rule/global/direct from Clash proxy-groups
+	LatencyMs       int    // -1 = not checked, >=0 = last ping result
+	LatencyCheckedAt int64
+	LatencyFailCount int
+	CreatedAt       int64
+	UpdatedAt       int64
+	LastOnline      int64 // 0 = never
+	HasLastOnl      bool
 }
 
-const nodeColumns = `id, name, api_url, api_secret_enc, outbound_enc, source, config_url, kce_key_enc, tags, enabled, remark, mode, created_at, updated_at, last_online_at`
+const nodeColumns = `id, name, api_url, api_secret_enc, outbound_enc, source, config_url, kce_key_enc, tags, enabled, remark, mode, latency_ms, latency_checked_at, latency_fail_count, created_at, updated_at, last_online_at`
+
+// Server is a lightweight struct returned by queries that need server address for ICMP monitoring.
+type ServerNode struct {
+	ID          string
+	Name        string
+	Server      string
+	Enabled     bool
+	LatencyMs   int
+	LatencyFailCount int
+}
 
 // CreateNode inserts a new node. Name uniqueness is enforced by the schema.
 func (s *Store) CreateNode(n *Node) error {
@@ -42,9 +55,9 @@ func (s *Store) CreateNode(n *Node) error {
 	n.CreatedAt = now
 	n.UpdatedAt = now
 	_, err := s.exec(
-		`INSERT INTO nodes (id, name, api_url, api_secret_enc, outbound_enc, source, config_url, kce_key_enc, tags, enabled, remark, mode, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		n.ID, n.Name, n.APIURL, n.APISecretEnc, n.OutboundEnc, n.Source, n.ConfigURL, n.KCEKeyEnc, strings.Join(n.Tags, ","), boolInt(n.Enabled), n.Remark, n.Mode, now, now)
+		`INSERT INTO nodes (id, name, api_url, api_secret_enc, outbound_enc, source, config_url, kce_key_enc, tags, enabled, remark, mode, latency_ms, latency_checked_at, latency_fail_count, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		n.ID, n.Name, n.APIURL, n.APISecretEnc, n.OutboundEnc, n.Source, n.ConfigURL, n.KCEKeyEnc, strings.Join(n.Tags, ","), boolInt(n.Enabled), n.Remark, n.Mode, n.LatencyMs, n.LatencyCheckedAt, n.LatencyFailCount, now, now)
 	return err
 }
 
@@ -82,8 +95,8 @@ func (s *Store) ListNodes() ([]Node, error) {
 func (s *Store) UpdateNode(n *Node) error {
 	n.UpdatedAt = time.Now().Unix()
 	res, err := s.exec(
-		`UPDATE nodes SET name = ?, api_url = ?, api_secret_enc = ?, outbound_enc = ?, source = ?, config_url = ?, kce_key_enc = ?, tags = ?, enabled = ?, remark = ?, mode = ?, updated_at = ? WHERE id = ?`,
-		n.Name, n.APIURL, n.APISecretEnc, n.OutboundEnc, n.Source, n.ConfigURL, n.KCEKeyEnc, strings.Join(n.Tags, ","), boolInt(n.Enabled), n.Remark, n.Mode, n.UpdatedAt, n.ID)
+		`UPDATE nodes SET name = ?, api_url = ?, api_secret_enc = ?, outbound_enc = ?, source = ?, config_url = ?, kce_key_enc = ?, tags = ?, enabled = ?, remark = ?, mode = ?, latency_ms = ?, latency_checked_at = ?, latency_fail_count = ?, updated_at = ? WHERE id = ?`,
+		n.Name, n.APIURL, n.APISecretEnc, n.OutboundEnc, n.Source, n.ConfigURL, n.KCEKeyEnc, strings.Join(n.Tags, ","), boolInt(n.Enabled), n.Remark, n.Mode, n.LatencyMs, n.LatencyCheckedAt, n.LatencyFailCount, n.UpdatedAt, n.ID)
 	if err != nil {
 		return err
 	}
@@ -130,7 +143,7 @@ func scanNode(r rowScanner) (*Node, error) {
 	var tags string
 	var enabled int
 	var lastOnline sql.NullInt64
-	err := r.Scan(&n.ID, &n.Name, &n.APIURL, &n.APISecretEnc, &n.OutboundEnc, &n.Source, &n.ConfigURL, &n.KCEKeyEnc, &tags, &enabled, &n.Remark, &n.Mode, &n.CreatedAt, &n.UpdatedAt, &lastOnline)
+	err := r.Scan(&n.ID, &n.Name, &n.APIURL, &n.APISecretEnc, &n.OutboundEnc, &n.Source, &n.ConfigURL, &n.KCEKeyEnc, &tags, &enabled, &n.Remark, &n.Mode, &n.LatencyMs, &n.LatencyCheckedAt, &n.LatencyFailCount, &n.CreatedAt, &n.UpdatedAt, &lastOnline)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}

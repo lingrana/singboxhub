@@ -181,6 +181,43 @@
         <p class="form-hint">用户重置订阅链接后,需等待此时间才能再次重置。设为 0 则不限制。</p>
       </div>
 
+      <h4 style="margin-top:24px">ICMP 延迟监控</h4>
+
+      <div class="form-group">
+        <label class="chk">
+          <input type="checkbox" name="icmp_monitor_enabled" {{if .Settings.ICMPMonitorEnabled}}checked{{end}}>
+          启用 ICMP 延迟监控
+        </label>
+        <p class="form-hint">定期 ping 订阅节点的服务器地址,超过阈值自动停用节点。</p>
+      </div>
+
+      <div class="form-group">
+        <label>监控目标(用于 ping 测试)</label>
+        <input name="icmp_monitor_target" value="{{.Settings.ICMPMonitorTarget}}" placeholder="8.8.8.8">
+        {{if fieldErr .FieldErr "icmp_monitor_target"}}<p class="mono muted">✕ {{fieldErr .FieldErr "icmp_monitor_target"}}</p>{{end}}
+        <p class="form-hint">节点将 ping 此地址以测试延迟。通常使用 8.8.8.8 或其他公共 DNS。</p>
+      </div>
+
+      <div class="form-group">
+        <label>监测间隔(秒,5-3600)</label>
+        <input name="icmp_monitor_interval_seconds" type="number" min="5" max="3600" value="{{.Settings.ICMPMonitorIntervalSeconds}}">
+        {{if fieldErr .FieldErr "icmp_monitor_interval_seconds"}}<p class="mono muted">✕ {{fieldErr .FieldErr "icmp_monitor_interval_seconds"}}</p>{{end}}
+      </div>
+
+      <div class="form-group">
+        <label>自动停用阈值(毫秒,100-10000)</label>
+        <input name="icmp_auto_disable_threshold_ms" type="number" min="100" max="10000" value="{{.Settings.ICMPAutoDisableThresholdMs}}">
+        {{if fieldErr .FieldErr "icmp_auto_disable_threshold_ms"}}<p class="mono muted">✕ {{fieldErr .FieldErr "icmp_auto_disable_threshold_ms"}}</p>{{end}}
+        <p class="form-hint">延迟超过此值视为异常。</p>
+      </div>
+
+      <div class="form-group">
+        <label>连续失败次数(1-10)</label>
+        <input name="icmp_auto_disable_consecutive" type="number" min="1" max="10" value="{{.Settings.ICMPAutoDisableConsecutive}}">
+        {{if fieldErr .FieldErr "icmp_auto_disable_consecutive"}}<p class="mono muted">✕ {{fieldErr .FieldErr "icmp_auto_disable_consecutive"}}</p>{{end}}
+        <p class="form-hint">连续超过阈值达到此次数后自动停用节点。恢复正常后自动启用。</p>
+      </div>
+
       <div class="form-actions">
         <button class="primary" type="submit">保存设置</button>
       </div>
@@ -464,11 +501,10 @@
         <td class="mono">{{if .Server}}{{.Server}}{{end}}</td>
         <td class="mono">{{if .Port}}{{.Port}}{{end}}</td>
         <td>
-          <button type="button" class="btn-icon" title="延迟测试"
-                  hx-post="/admin/nodes/{{.ID}}/latency" hx-swap="none">测速</button>
-          <button type="button" class="btn-icon danger" title="停用节点"
-                  hx-post="/admin/nodes/{{.ID}}/toggle" hx-vals='{"enable":"false"}'
-                  hx-confirm="停用后订阅立即不含该节点。">停用</button>
+          <button type="button" class="btn-icon{{if not .Enabled}} primary{{else}} danger{{end}}"
+                  hx-post="/admin/nodes/{{.ID}}/toggle" hx-vals='{"enable":"{{if .Enabled}}false{{else}}true{{end}}"}'
+                  hx-swap="none"
+                  hx-confirm="{{if .Enabled}}停用后订阅立即不含该节点。{{else}}启用后订阅将包含该节点。{{end}}">{{if .Enabled}}停用{{else}}启用{{end}}</button>
         </td>
       </tr>
       {{end}}
