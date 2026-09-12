@@ -6,6 +6,7 @@ package store
 import (
 	"database/sql"
 	"fmt"
+	"net/url"
 	"strings"
 
 	_ "github.com/lib/pq"
@@ -59,7 +60,9 @@ func OpenWithConfig(driver, dsn string) (*Store, error) {
 	}
 	driverName := string(driver)
 	if driver == string(DriverSQLite) {
-		dsn = "file:" + dsn + "?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)"
+		dsn = "file:" + normalizeDSN(driver, dsn) + "?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)"
+	} else {
+		dsn = normalizeDSN(driver, dsn)
 	}
 	db, err := sql.Open(driverName, dsn)
 	if err != nil {
@@ -78,6 +81,37 @@ func OpenWithConfig(driver, dsn string) (*Store, error) {
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
 	return s, nil
+}
+
+// normalizeDSN applies driver-specific DSN defaults. PostgreSQL: inject
+// sslmode=prefer when the DSN omits one — lib/pq otherwise defaults to
+// require, which refuses every TLS-less server (the common self-hosted case)
+// right from the first-run setup page. SQLite: strip an accidental leading
+// file: scheme, which the file-URI rebuild in OpenWithConfig would otherwise
+// duplicate.
+func normalizeDSN(driver, dsn string) string {
+	switch driver {
+	case string(DriverSQLite):
+		return strings.TrimPrefix(dsn, "file:")
+	case string(DriverPostgres):
+		if u, err := url.Parse(dsn); err == nil && (u.Scheme == "postgres" || u.Scheme == "postgresql") {
+			q := u.Query()
+			if q.Has("sslmode") {
+				return dsn
+			}
+			q.Set("sslmode", "prefer")
+			u.RawQuery = q.Encode()
+			return u.String()
+		}
+		for _, tok := range strings.Fields(dsn) {
+			if strings.HasPrefix(tok, "sslmode=") {
+				return dsn
+			}
+		}
+		return dsn + " sslmode=prefer"
+	default:
+		return dsn
+	}
 }
 
 func (s *Store) rebind(query string) string {

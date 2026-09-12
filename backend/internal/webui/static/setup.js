@@ -9,7 +9,7 @@
       if (!input) return;
       if (radio.value === 'postgres' && radio.checked) {
         if (input.value === defaultSQLite) input.value = '';
-        input.placeholder = 'postgres://user:password@host:5432/singhub?sslmode=require';
+        input.placeholder = 'postgres://user:password@host:5432/singhub';
       }
       if (radio.value === 'sqlite' && radio.checked) {
         if (!input.value) input.value = defaultSQLite;

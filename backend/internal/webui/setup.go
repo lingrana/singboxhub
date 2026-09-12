@@ -62,21 +62,27 @@ func RunDatabaseSetup(ctx context.Context, listenAddr, dataDir string, logger *s
 		probe, err := store.OpenWithConfig(selection.Driver, selection.DSN)
 		if err != nil {
 			logger.Error("database setup validation failed", "driver", selection.Driver, "error", err)
-			renderSetupError(w, rd, defaultSQLite, "数据库连接或初始化失败，请检查配置")
+			renderSetupError(w, rd, defaultSQLite, "数据库连接或初始化失败："+redactDSN(selection.DSN, err.Error()))
 			return
 		}
 		if err := probe.Close(); err != nil {
-			renderSetupError(w, rd, defaultSQLite, "数据库已初始化，但关闭连接失败")
+			renderSetupError(w, rd, defaultSQLite, "数据库已初始化，但关闭连接失败："+redactDSN(selection.DSN, err.Error()))
 			return
 		}
 		if err := config.SaveDatabaseSelection(dataDir, selection); err != nil {
-			renderSetupError(w, rd, defaultSQLite, "无法保存数据库选择")
+			renderSetupError(w, rd, defaultSQLite, "无法保存数据库选择："+redactDSN(selection.DSN, err.Error()))
 			return
 		}
 		once.Do(func() { result <- setupResult{selection: selection} })
 		securityHeaders(w)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_, _ = w.Write([]byte("<!doctype html><meta charset=\"utf-8\"><title>初始化完成</title><p>数据库初始化完成，正在启动面板。</p>"))
+		_, _ = w.Write([]byte("<!doctype html><meta charset=\"utf-8\"><title>初始化完成</title><meta http-equiv=\"refresh\" content=\"2;url=/login\"><p>数据库初始化完成，正在启动面板，即将跳转到登录页…</p>"))
+	})
+	// First-run catch-all: any other path (/, /login, /admin/*, favicon.ico, …)
+	// lands on the setup page instead of a 404, so the first visit to the
+	// panel always reaches initialization.
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/setup", http.StatusSeeOther)
 	})
 	server := &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 	go func() {
@@ -104,4 +110,13 @@ func renderSetupError(w http.ResponseWriter, rd *Renderer, dsn, message string) 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	_ = rd.render(w, "setup", setupPageData{SQLiteDSN: dsn, Error: message})
+}
+
+// redactDSN keeps connection details (which may carry the password) out of
+// the error text shown on the setup page.
+func redactDSN(dsn, message string) string {
+	if dsn == "" {
+		return message
+	}
+	return strings.ReplaceAll(message, dsn, "«连接信息已隐藏»")
 }

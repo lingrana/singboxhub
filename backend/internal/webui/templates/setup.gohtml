@@ -22,7 +22,7 @@
       </fieldset>
       <label for="dsn" class="mono">DATABASE PATH / DSN</label>
       <input id="dsn" name="dsn" value="{{.SQLiteDSN}}" required autocomplete="off">
-      <p class="setup-hint mono">SQLite 示例：data/panel.db　PostgreSQL 示例：postgres://user:password@host:5432/singhub?sslmode=require</p>
+      <p class="setup-hint mono">SQLite 示例：data/panel.db　PostgreSQL 示例：postgres://user:password@host:5432/singhub　（未指定 sslmode 时自动协商加密；需强制加密可加 sslmode=require 或 verify-full）</p>
       <button type="submit" class="submit-btn">初始化并启动 →</button>
     </form>
   </section>
