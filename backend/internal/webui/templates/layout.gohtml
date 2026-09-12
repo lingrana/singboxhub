@@ -3,11 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="htmx-config" content='{"allowEval":false}'>
 <title>{{.Title}}</title>
 {{if .FaviconURL}}<link rel="icon" href="{{.FaviconURL}}">{{end}}
 <link rel="stylesheet" href="/admin/assets/style.css?v={{.CSSVer}}">
 <script src="/admin/assets/htmx.min.js" defer></script>
-<script src="/admin/assets/app.js" defer></script>
+<script src="/admin/assets/app.js?v={{.JSVer}}" defer></script>
 </head>
 <body>
 {{.BodyFrame}}

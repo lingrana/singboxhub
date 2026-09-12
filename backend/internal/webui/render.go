@@ -26,6 +26,7 @@ var staticFS embed.FS
 type Renderer struct {
 	tpls   *template.Template
 	cssVer string
+	jsVer  string
 }
 
 // NewRenderer parses all templates under templates/*.gohtml.
@@ -78,7 +79,11 @@ func NewRenderer() (*Renderer, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read style.css: %w", err)
 	}
-	return &Renderer{tpls: parsed, cssVer: contentStamp(css)}, nil
+	appJS, err := fs.ReadFile(staticFS, "static/app.js")
+	if err != nil {
+		return nil, fmt.Errorf("read app.js: %w", err)
+	}
+	return &Renderer{tpls: parsed, cssVer: contentStamp(css), jsVer: contentStamp(appJS)}, nil
 }
 
 // Static exposes the embedded static assets (htmx, css, app.js).
@@ -86,6 +91,9 @@ func Static() (fs.FS, error) { return fs.Sub(staticFS, "static") }
 
 // CSSVersion returns a content-derived stamp for style.css cache busting.
 func (rd *Renderer) CSSVersion() string { return rd.cssVer }
+
+// JSVersion returns a content-derived stamp for app.js cache busting.
+func (rd *Renderer) JSVersion() string { return rd.jsVer }
 
 // render executes the named template into w.
 func (rd *Renderer) render(w io.Writer, name string, data any) error {
@@ -103,6 +111,7 @@ type Base struct {
 	Theme      string // "light" | "dark" from cookie
 	Nonce      string
 	CSSVer     string
+	JSVer      string
 	FaviconURL string
 	LogoURL    string
 	BrandName  string
@@ -153,6 +162,7 @@ func (rd *Renderer) base(page, title, username, theme string) Base {
 		Theme:    theme,
 		Nonce:    fmt.Sprintf("n%d", requestCounter.Add(1)),
 		CSSVer:   rd.cssVer,
+		JSVer:    rd.jsVer,
 	}
 }
 

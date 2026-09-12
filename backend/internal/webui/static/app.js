@@ -26,6 +26,38 @@
     showToast('err', '网络错误,请检查连接');
   });
 
+  // Subscription filters are delegated because the node table is refreshed
+  // by htmx every few seconds.
+  function applySubscriptionFilter() {
+    var filter = document.getElementById('sub-filter');
+    if (!filter) return;
+    var active = filter.querySelector('button.active') || filter.querySelector('button');
+    if (!active) return;
+    var group = active.dataset.group;
+    document.querySelectorAll('#sub-nodes tbody tr').forEach(function (row) {
+      row.style.display = row.dataset.group === group ? '' : 'none';
+    });
+  }
+
+  document.addEventListener('click', function (evt) {
+    var btn = evt.target.closest('#sub-filter button');
+    if (!btn) return;
+    var filter = btn.closest('#sub-filter');
+    filter.querySelectorAll('button').forEach(function (item) {
+      item.classList.toggle('active', item === btn);
+    });
+    applySubscriptionFilter();
+  });
+
+  document.body.addEventListener('htmx:afterSwap', function (evt) {
+    if (evt.detail.target && (evt.detail.target.id === 'sub-nodes' ||
+        document.getElementById('sub-filter'))) {
+      applySubscriptionFilter();
+    }
+  });
+
+  applySubscriptionFilter();
+
   // ---- modal close with animation ----
   function closeModal(mask) {
     if (!mask) return;
@@ -91,6 +123,47 @@
         );
       }
     }
+  });
+
+  // Profile edit is fetched into the document dynamically, so submit it
+  // explicitly instead of relying on htmx to initialize the new form node.
+  document.addEventListener('submit', function (evt) {
+    var form = evt.target.closest('#profile-edit-form');
+    if (!form) return;
+    evt.preventDefault();
+    evt.stopImmediatePropagation();
+    var submit = form.querySelector('button[type="submit"]');
+    if (submit) submit.disabled = true;
+    fetch(form.action, {
+      method: 'POST',
+      body: new URLSearchParams(new FormData(form)),
+      headers: {'HX-Request': 'true'}
+    }).then(function (response) {
+      var raw = response.headers.get('HX-Trigger');
+      if (raw) {
+        try {
+          var events = JSON.parse(raw);
+          Object.keys(events).forEach(function (name) {
+            document.body.dispatchEvent(new CustomEvent(name, {
+              bubbles: true,
+              detail: events[name]
+            }));
+          });
+        } catch (_) {
+          showToast('err', '保存响应异常');
+        }
+      }
+      if (response.ok) {
+        var updated = raw && raw.indexOf('profile-updated') !== -1;
+        if (updated) closeModal(form.closest('.modal-mask'));
+      } else {
+        showToast('err', '保存失败');
+      }
+    }).catch(function () {
+      showToast('err', '网络错误,请检查连接');
+    }).finally(function () {
+      if (submit) submit.disabled = false;
+    });
   });
 
   // ---- brand upload ----

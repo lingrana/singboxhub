@@ -100,6 +100,7 @@ type statusBody struct {
 	Nodes      []nodeCard
 	Theme      string
 	CSSVer     string
+	JSVer      string
 	Title      string
 	FaviconURL string
 	LogoURL    string
@@ -113,7 +114,7 @@ func (u *UI) pageStatus(w http.ResponseWriter, r *http.Request) {
 	token := ""
 	base := u.rd.base("", "sing-box hub", "", u.themeOf(r))
 	u.loadBranding(r, &base)
-	body := statusBody{Theme: base.Theme, CSSVer: base.CSSVer, Title: base.Title, FaviconURL: base.FaviconURL, LogoURL: base.LogoURL, BrandName: base.BrandName}
+	body := statusBody{Theme: base.Theme, CSSVer: base.CSSVer, JSVer: base.JSVer, Title: base.Title, FaviconURL: base.FaviconURL, LogoURL: base.LogoURL, BrandName: base.BrandName}
 	// Check if user is logged in.
 	if tk, ok := u.resolveSession(w, r); ok {
 		if claims, err := u.verifyAccess(tk); err == nil {
@@ -509,7 +510,11 @@ func (u *UI) handleNodeCreate(w http.ResponseWriter, r *http.Request) {
 	res := u.apiSend(r, token, http.MethodPost, "/nodes", payload, nil)
 	switch {
 	case res.Status == http.StatusCreated:
-		hxTrigger(w, mergeEvents(toastOK("主机已创建"+importToastSuffix(res)), map[string]any{"refresh-nodes": ""}))
+		message := "主机已创建" + importToastSuffix(res)
+		if u.ensureSubscriptionToken(r, token) {
+			message += " · 已加入订阅"
+		}
+		hxTrigger(w, mergeEvents(toastOK(message), map[string]any{"refresh-nodes": ""}))
 		w.WriteHeader(http.StatusOK)
 		return
 	}
@@ -521,6 +526,19 @@ func (u *UI) handleNodeCreate(w http.ResponseWriter, r *http.Request) {
 		form.FormError = res.ProblemDetail()
 	}
 	u.renderFrag(w, "frag_node_form", form)
+}
+
+// ensureSubscriptionToken creates the first token after a host is added.
+// Existing tokens are left unchanged so imported nodes appear dynamically.
+func (u *UI) ensureSubscriptionToken(r *http.Request, token string) bool {
+	var sub subscription
+	if _, err := u.apiGetJSON(r, token, "/subscription", &sub); err != nil {
+		return false
+	}
+	if sub.Enabled {
+		return true
+	}
+	return u.apiSend(r, token, http.MethodPost, "/subscription/token", nil, nil).Status == http.StatusOK
 }
 
 func (u *UI) handleNodeUpdate(w http.ResponseWriter, r *http.Request) {

@@ -80,7 +80,7 @@ func TestProfileEditUpdatesUsernameAndRotatesSession(t *testing.T) {
 	e := newUIEnv(t)
 	cookies := userCookies(t, e)
 	edit := readBody(t, e.get(t, "/user/profile/edit", cookies, true))
-	if !strings.Contains(edit, `hx-post="/user/profile/edit"`) {
+	if !strings.Contains(edit, `method="post" action="/user/profile/edit"`) {
 		t.Fatal("profile edit form missing")
 	}
 	res := e.postForm(t, "/user/profile/edit", url.Values{
@@ -95,6 +95,34 @@ func TestProfileEditUpdatesUsernameAndRotatesSession(t *testing.T) {
 	profile := readBody(t, e.get(t, "/user/profile", res.Cookies(), true))
 	if !strings.Contains(profile, "澪染管理员") {
 		t.Fatalf("profile did not render updated username: %s", profile[:min(len(profile), 300)])
+	}
+}
+
+func TestSubscriptionPageRendersCardAndImportedNode(t *testing.T) {
+	e := newUIEnv(t)
+	cookies := userCookies(t, e)
+	res := e.postForm(t, "/admin/nodes/new", url.Values{
+		"name":          {"subscription-node"},
+		"api_url":       {"http://127.0.0.1:1"},
+		"api_secret":    {"secret"},
+		"outbound_json": {`{"type":"vless","tag":"parsed-node","server":"example.com","server_port":443,"uuid":"11111111-2222-3333-4444-555555555555"}`},
+		"enabled":       {"on"},
+	}, cookies)
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("node create status=%d", res.StatusCode)
+	}
+	body := readBody(t, e.get(t, "/admin/subscription", cookies, false))
+	for _, want := range []string{`id="sub-card"`, `data-group="rule"`, "subscription-node", "订阅链接"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("subscription page missing %q: %s", want, body[:min(len(body), 600)])
+		}
+	}
+	if strings.Contains(body, "<script>") {
+		t.Fatal("subscription page still contains an inline script blocked by CSP")
+	}
+	res = e.postForm(t, "/admin/subscription/token", nil, cookies)
+	if res.StatusCode != http.StatusOK || !strings.Contains(res.Header.Get("HX-Trigger"), "ui-toast") {
+		t.Fatalf("subscription token reset status=%d trigger=%q", res.StatusCode, res.Header.Get("HX-Trigger"))
 	}
 }
 

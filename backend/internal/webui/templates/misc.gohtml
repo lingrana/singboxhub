@@ -113,25 +113,14 @@
       <button type="button" data-group="direct">Direct</button>
     </div>
   </div>
+  <div id="sub-card">
+    {{template "frag_sub_card" .}}
+  </div>
   <div id="sub-nodes"
        hx-get="/admin/subscription/nodes" hx-trigger="every 10s, refresh-nodes from:body" hx-swap="innerHTML">
     {{template "frag_sub_nodes" .Nodes}}
   </div>
 </div>
-<script>
-document.getElementById('sub-filter').addEventListener('click', function(e) {
-  var btn = e.target.closest('button');
-  if (!btn) return;
-  this.querySelectorAll('button').forEach(function(b) { b.classList.remove('active'); });
-  btn.classList.add('active');
-  var group = btn.dataset.group;
-  document.querySelectorAll('#sub-nodes tbody tr').forEach(function(row) {
-    var tag = row.querySelector('.tag');
-    row.style.display = (tag && tag.textContent.toLowerCase() === group) ? '' : 'none';
-  });
-});
-document.querySelector('#sub-filter button.active').click();
-</script>
 {{end}}
 
 {{define "frag_sub_card"}}
@@ -428,7 +417,7 @@ document.querySelector('#sub-filter button.active').click();
   <div class="modal user-modal" role="dialog" aria-modal="true">
     <h3>编辑个人信息</h3>
     {{if .Error}}<p class="error mono">{{.Error}}</p>{{end}}
-    <form hx-post="/user/profile/edit" hx-target="none" hx-swap="none">
+    <form method="post" action="/user/profile/edit" id="profile-edit-form">
       <label for="profile-username">用户名</label>
       <input id="profile-username" name="username" value="{{.Username}}" required maxlength="64" autocomplete="off">
       <label for="profile-new-password">新密码 (留空则不修改)</label>
@@ -492,7 +481,7 @@ document.querySelector('#sub-filter button.active').click();
     <tbody>
       {{range $key := listOf "rule" "global" "direct"}}
       {{range index $.NodeGroups $key}}
-      <tr>
+      <tr data-group="{{$key}}">
         <td><b>{{.Name}}</b></td>
         <td><span class="tag">{{index $labels $key}}</span></td>
         <td>{{if .Source}}<span class="tag">导入</span>{{else}}<span class="muted">手动</span>{{end}}</td>

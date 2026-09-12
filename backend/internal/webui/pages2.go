@@ -318,14 +318,16 @@ type subNodeRow struct {
 	Mode   string
 }
 
-// ModeGroup buckets a node into the subscription-page classification:
-// rule / global / direct / none (no runtime mode reported yet).
+// ModeGroup buckets a node into the subscription-page classification.
+// Imported proxies without a Clash runtime mode use the default Rule group.
 func (r subNodeRow) ModeGroup() string {
 	switch r.Mode {
 	case "rule", "global", "direct":
 		return r.Mode
 	default:
-		return "none"
+		// Imported proxies have no Clash API and therefore no runtime mode.
+		// Rule is the panel's default subscription group for those nodes.
+		return "rule"
 	}
 }
 
@@ -350,9 +352,6 @@ func (g subNodesBody) NodeGroups() map[string][]subNodeRow {
 func buildSubNodeGroups(rows []subNodeRow) subNodesBody {
 	var g subNodesBody
 	for _, r := range rows {
-		if !r.Online {
-			continue
-		}
 		switch r.ModeGroup() {
 		case "rule":
 			g.Rule = append(g.Rule, r)
@@ -380,17 +379,30 @@ func (u *UI) pageSubscription(w http.ResponseWriter, r *http.Request) {
 // fetchSubNodes loads the node pool with runtime mode for the availability
 // card (mode comes from each node's Clash API: rule/global/direct).
 func (u *UI) fetchSubNodes(r *http.Request, token string) []subNodeRow {
-	var list nodeCardList
-	if _, err := u.apiGetJSON(r, token, "/stats/nodes", &list); err != nil {
+	var stats nodeCardList
+	_, statsErr := u.apiGetJSON(r, token, "/stats/nodes", &stats)
+	byID := make(map[string]nodeCard, len(stats.Items))
+	for _, n := range stats.Items {
+		byID[n.ID] = n
+	}
+	var list nodeList
+	if _, err := u.apiGetJSON(r, token, "/nodes?page_size=100", &list); err != nil {
 		return nil
 	}
 	rows := make([]subNodeRow, 0, len(list.Items))
 	for _, n := range list.Items {
-		mode := ""
-		if n.Mode != nil {
-			mode = *n.Mode
+		if !n.Enabled || !n.HasOutbound {
+			continue
 		}
-		rows = append(rows, subNodeRow{ID: n.ID, Name: n.Name, Source: n.Source != "", Online: n.Online, Mode: mode})
+		stat := byID[n.ID]
+		mode := ""
+		if stat.Mode != nil {
+			mode = *stat.Mode
+		}
+		rows = append(rows, subNodeRow{
+			ID: n.ID, Name: n.Name, Source: n.Source != "",
+			Online: statsErr == nil && stat.Online, Mode: mode,
+		})
 	}
 	return rows
 }
@@ -858,7 +870,7 @@ func (u *UI) handleSubscriptionReset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	res := u.apiSend(r, token, http.MethodPost, "/subscription/token", nil, nil)
-	if res.Status != http.StatusCreated {
+	if res.Status != http.StatusOK {
 		hxTrigger(w, toastErr(res.ProblemDetail()))
 	} else {
 		hxTrigger(w, toastOK("订阅令牌已生成,旧链接已失效"))
@@ -1253,7 +1265,7 @@ func (u *UI) handleUserProfileSubscriptionToken(w http.ResponseWriter, r *http.R
 	// Update last_reset_at
 	_ = u.store.SetResetNow(userID)
 	res := u.apiSend(r, token, http.MethodPost, "/subscription/token", nil, nil)
-	if res.Status != http.StatusCreated {
+	if res.Status != http.StatusOK {
 		hxTrigger(w, toastErr(res.ProblemDetail()))
 	} else {
 		hxTrigger(w, toastOK("订阅令牌已生成,旧链接已失效"))
