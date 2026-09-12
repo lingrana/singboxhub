@@ -112,10 +112,17 @@ func TestSubscriptionPageRendersCardAndImportedNode(t *testing.T) {
 		t.Fatalf("node create status=%d", res.StatusCode)
 	}
 	body := readBody(t, e.get(t, "/admin/subscription", cookies, false))
-	for _, want := range []string{`id="sub-card"`, `data-group="rule"`, "subscription-node", "订阅链接"} {
+	for _, want := range []string{`data-group="rule"`, "subscription-node-Vless", "example.com"} {
 		if !strings.Contains(body, want) {
-			t.Fatalf("subscription page missing %q: %s", want, body[:min(len(body), 600)])
+			t.Fatalf("subscription page missing %q", want)
 		}
+	}
+	if strings.Contains(body, "订阅链接") || strings.Contains(body, `id="sub-card"`) {
+		t.Fatal("subscription page should only render node list")
+	}
+	nodesPage := readBody(t, e.get(t, "/admin/nodes", cookies, false))
+	if strings.Contains(nodesPage, "解析节点") {
+		t.Fatal("host page should not render imported node details")
 	}
 	if strings.Contains(body, "<script>") {
 		t.Fatal("subscription page still contains an inline script blocked by CSP")

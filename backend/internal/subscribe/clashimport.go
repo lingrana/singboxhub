@@ -23,16 +23,19 @@ var ErrKeyRequired = errors.New("subscription payload is KCE1 encrypted; a decry
 
 // ParsedSource is the outcome of decoding one subscription payload.
 type ParsedSource struct {
-	Nodes   []Node   // convertible proxies as panel export nodes
-	Skipped []string // names of proxies dropped (unsupported type/plugin/bad fields)
+	Nodes   []Node            // convertible proxies as panel export nodes
+	Skipped []string          // names of proxies dropped (unsupported type/plugin/bad fields)
+	Modes   map[string]string // proxy name -> mode (rule/global/direct) from proxy-groups
 }
 
 // ParseClashConfig decodes a Clash/mihomo YAML document into exportable
 // nodes. Each proxy becomes a sing-box outbound JSON whose tag is the proxy
 // name; unsupported entries are skipped and reported in Skipped.
+// If proxy-groups exist, they are parsed to infer mode (rule/global/direct).
 func ParseClashConfig(raw []byte) (*ParsedSource, error) {
 	var doc struct {
-		Proxies []map[string]any `yaml:"proxies"`
+		Proxies      []map[string]any   `yaml:"proxies"`
+		ProxyGroups  []map[string]any   `yaml:"proxy-groups"`
 	}
 	if err := yaml.Unmarshal(raw, &doc); err != nil {
 		return nil, fmt.Errorf("not a Clash config: %w", err)
@@ -40,7 +43,14 @@ func ParseClashConfig(raw []byte) (*ParsedSource, error) {
 	if len(doc.Proxies) == 0 {
 		return nil, errors.New("Clash config has no proxies")
 	}
-	out := &ParsedSource{Nodes: make([]Node, 0, len(doc.Proxies))}
+	out := &ParsedSource{
+		Nodes: make([]Node, 0, len(doc.Proxies)),
+		Modes: make(map[string]string),
+	}
+
+	// Extract mode mapping from proxy-groups if present
+	extractModes(doc.ProxyGroups, out.Modes)
+
 	seen := map[string]bool{}
 	for _, p := range doc.Proxies {
 		name := asString(p["name"])
@@ -76,6 +86,40 @@ func uniqueName(name string, seen map[string]bool) string {
 		if !seen[candidate] {
 			return candidate
 		}
+	}
+}
+
+// extractModes parses proxy-groups to infer mode for each proxy.
+// Groups named "GLOBAL", "DIRECT", or "全局"/"直连" classify their proxies accordingly.
+// Proxies not in recognized groups default to "rule" mode.
+func extractModes(groups []map[string]any, modes map[string]string) {
+	for _, g := range groups {
+		groupName := asString(g["name"])
+		if groupName == "" {
+			continue
+		}
+		mode := groupNameToMode(groupName)
+		if mode == "" {
+			continue // Not a recognized mode group
+		}
+		proxies := asStringSlice(g["proxies"])
+		for _, proxyName := range proxies {
+			if proxyName != "" {
+				modes[proxyName] = mode
+			}
+		}
+	}
+}
+
+// groupNameToMode maps Clash proxy-group names to panel modes (rule/global/direct).
+func groupNameToMode(name string) string {
+	switch name {
+	case "GLOBAL", "全局", "Global":
+		return "global"
+	case "DIRECT", "直连", "Direct":
+		return "direct"
+	default:
+		return "" // Not a recognized mode group
 	}
 }
 

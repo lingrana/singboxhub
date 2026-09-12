@@ -27,13 +27,14 @@ type Node struct {
 	Tags         []string
 	Enabled      bool
 	Remark       string
+	Mode         string // rule/global/direct from Clash proxy-groups
 	CreatedAt    int64
 	UpdatedAt    int64
 	LastOnline   int64 // 0 = never
 	HasLastOnl   bool
 }
 
-const nodeColumns = `id, name, api_url, api_secret_enc, outbound_enc, source, config_url, kce_key_enc, tags, enabled, remark, created_at, updated_at, last_online_at`
+const nodeColumns = `id, name, api_url, api_secret_enc, outbound_enc, source, config_url, kce_key_enc, tags, enabled, remark, mode, created_at, updated_at, last_online_at`
 
 // CreateNode inserts a new node. Name uniqueness is enforced by the schema.
 func (s *Store) CreateNode(n *Node) error {
@@ -41,9 +42,9 @@ func (s *Store) CreateNode(n *Node) error {
 	n.CreatedAt = now
 	n.UpdatedAt = now
 	_, err := s.exec(
-		`INSERT INTO nodes (id, name, api_url, api_secret_enc, outbound_enc, source, config_url, kce_key_enc, tags, enabled, remark, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		n.ID, n.Name, n.APIURL, n.APISecretEnc, n.OutboundEnc, n.Source, n.ConfigURL, n.KCEKeyEnc, strings.Join(n.Tags, ","), boolInt(n.Enabled), n.Remark, now, now)
+		`INSERT INTO nodes (id, name, api_url, api_secret_enc, outbound_enc, source, config_url, kce_key_enc, tags, enabled, remark, mode, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		n.ID, n.Name, n.APIURL, n.APISecretEnc, n.OutboundEnc, n.Source, n.ConfigURL, n.KCEKeyEnc, strings.Join(n.Tags, ","), boolInt(n.Enabled), n.Remark, n.Mode, now, now)
 	return err
 }
 
@@ -81,8 +82,8 @@ func (s *Store) ListNodes() ([]Node, error) {
 func (s *Store) UpdateNode(n *Node) error {
 	n.UpdatedAt = time.Now().Unix()
 	res, err := s.exec(
-		`UPDATE nodes SET name = ?, api_url = ?, api_secret_enc = ?, outbound_enc = ?, source = ?, config_url = ?, kce_key_enc = ?, tags = ?, enabled = ?, remark = ?, updated_at = ? WHERE id = ?`,
-		n.Name, n.APIURL, n.APISecretEnc, n.OutboundEnc, n.Source, n.ConfigURL, n.KCEKeyEnc, strings.Join(n.Tags, ","), boolInt(n.Enabled), n.Remark, n.UpdatedAt, n.ID)
+		`UPDATE nodes SET name = ?, api_url = ?, api_secret_enc = ?, outbound_enc = ?, source = ?, config_url = ?, kce_key_enc = ?, tags = ?, enabled = ?, remark = ?, mode = ?, updated_at = ? WHERE id = ?`,
+		n.Name, n.APIURL, n.APISecretEnc, n.OutboundEnc, n.Source, n.ConfigURL, n.KCEKeyEnc, strings.Join(n.Tags, ","), boolInt(n.Enabled), n.Remark, n.Mode, n.UpdatedAt, n.ID)
 	if err != nil {
 		return err
 	}
@@ -129,7 +130,7 @@ func scanNode(r rowScanner) (*Node, error) {
 	var tags string
 	var enabled int
 	var lastOnline sql.NullInt64
-	err := r.Scan(&n.ID, &n.Name, &n.APIURL, &n.APISecretEnc, &n.OutboundEnc, &n.Source, &n.ConfigURL, &n.KCEKeyEnc, &tags, &enabled, &n.Remark, &n.CreatedAt, &n.UpdatedAt, &lastOnline)
+	err := r.Scan(&n.ID, &n.Name, &n.APIURL, &n.APISecretEnc, &n.OutboundEnc, &n.Source, &n.ConfigURL, &n.KCEKeyEnc, &tags, &enabled, &n.Remark, &n.Mode, &n.CreatedAt, &n.UpdatedAt, &lastOnline)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}

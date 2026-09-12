@@ -113,9 +113,6 @@
       <button type="button" data-group="direct">Direct</button>
     </div>
   </div>
-  <div id="sub-card">
-    {{template "frag_sub_card" .}}
-  </div>
   <div id="sub-nodes"
        hx-get="/admin/subscription/nodes" hx-trigger="every 10s, refresh-nodes from:body" hx-swap="innerHTML">
     {{template "frag_sub_nodes" .Nodes}}
@@ -465,38 +462,35 @@
 {{end}}
 
 {{define "frag_sub_nodes"}}
-<div class="user-table-wrap">
-  {{$labels := mkMap "rule" "规则" "global" "全局" "direct" "直连"}}
+<div class="subscription-node-list">
   {{$total := add (len .Rule) (add (len .Global) (len .Direct))}}
   {{if gt $total 0}}
-  <table>
-    <thead>
-      <tr>
-        <th>节点</th>
-        <th>分组</th>
-        <th>来源</th>
-        <th>操作</th>
-      </tr>
-    </thead>
-    <tbody>
-      {{range $key := listOf "rule" "global" "direct"}}
-      {{range index $.NodeGroups $key}}
-      <tr data-group="{{$key}}">
-        <td><b>{{.Name}}</b></td>
-        <td><span class="tag">{{index $labels $key}}</span></td>
-        <td>{{if .Source}}<span class="tag">导入</span>{{else}}<span class="muted">手动</span>{{end}}</td>
-        <td>
-          <button type="button" hx-post="/admin/nodes/{{.ID}}/latency" hx-swap="none">延迟测试</button>
-          <button type="button" hx-post="/admin/nodes/{{.ID}}/toggle" hx-vals='{"enable":"false"}'
-                  hx-confirm="停用后订阅立即不含该节点。">禁用</button>
-        </td>
-      </tr>
-      {{end}}
-      {{end}}
-    </tbody>
-  </table>
+    {{range $key := listOf "rule" "global" "direct"}}
+    {{range index $.NodeGroups $key}}
+    <div class="subscription-node" data-group="{{$key}}">
+      <div class="subscription-node-main">
+        <span class="subscription-node-status{{if .Online}} online{{end}}" title="{{if .Online}}在线{{else}}离线或未连接{{end}}"></span>
+        <div class="subscription-node-copy">
+          <b class="subscription-node-name">{{.Name}}</b>
+          <div class="subscription-node-meta mono">
+            {{if .Type}}<span class="tag">{{.Type}}</span>{{end}}
+            {{if .Server}}<span>{{.Server}}{{if .Port}}:{{.Port}}{{end}}</span>{{end}}
+            {{if .Source}}<span class="muted">导入</span>{{end}}
+          </div>
+        </div>
+      </div>
+      <div class="subscription-node-actions">
+        <button type="button" class="subscription-node-action" title="延迟测试"
+                hx-post="/admin/nodes/{{.ID}}/latency" hx-swap="none">−</button>
+        <button type="button" class="subscription-node-action" title="停用节点"
+                hx-post="/admin/nodes/{{.ID}}/toggle" hx-vals='{"enable":"false"}'
+                hx-confirm="停用后订阅立即不含该节点。">⌃</button>
+      </div>
+    </div>
+    {{end}}
+    {{end}}
   {{else}}
-  <p class="muted">暂无在线节点。</p>
+  <p class="muted">暂无已启用节点。</p>
   {{end}}
 </div>
 {{end}}

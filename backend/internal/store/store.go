@@ -323,6 +323,8 @@ CREATE TABLE IF NOT EXISTS upstream_subscriptions (
   created_at    INTEGER NOT NULL,
   updated_at    INTEGER NOT NULL
 );`,
+	// 10: add mode column to nodes for Clash proxy-group classification
+	`ALTER TABLE nodes ADD COLUMN mode TEXT NOT NULL DEFAULT '';`,
 }
 
 func (s *Store) migrate() error {
@@ -384,7 +386,8 @@ CREATE TABLE IF NOT EXISTS nodes (
   tags TEXT NOT NULL DEFAULT '', enabled INTEGER NOT NULL DEFAULT 1,
   remark TEXT NOT NULL DEFAULT '', created_at BIGINT NOT NULL, updated_at BIGINT NOT NULL,
   last_online_at BIGINT NOT NULL DEFAULT 0, source TEXT NOT NULL DEFAULT '',
-  config_url TEXT NOT NULL DEFAULT '', kce_key_enc TEXT NOT NULL DEFAULT ''
+  config_url TEXT NOT NULL DEFAULT '', kce_key_enc TEXT NOT NULL DEFAULT '',
+  mode TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS traffic_samples (
   node_id TEXT NOT NULL REFERENCES nodes(id) ON DELETE CASCADE, ts BIGINT NOT NULL,

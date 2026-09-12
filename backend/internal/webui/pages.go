@@ -296,7 +296,6 @@ type hostNodeView struct {
 	TodayDownBytes    int64
 	TotalUpBytes      int64
 	TotalDownBytes    int64
-	ParsedNodes       []nodeCard
 }
 
 func (u *UI) pageNodes(w http.ResponseWriter, r *http.Request) {
@@ -351,40 +350,13 @@ func (u *UI) buildHostNodes(r *http.Request, token string, nodes []nodeSummary) 
 		byID[item.ID] = item
 	}
 	hosts := make([]hostNodeView, 0)
-	byHost := make(map[string]int)
 	for _, n := range nodes {
 		if n.Source != "" {
 			continue
 		}
 		h := hostNodeView{nodeSummary: n}
 		h.addStats(byID[n.ID])
-		if n.ConfigImported && (n.ParsedName != "" || n.ParsedType != "" || n.Server != "") {
-			h.ParsedNodes = append(h.ParsedNodes, nodeCard{
-				ID: n.ID, Name: n.ParsedName, ParsedName: n.ParsedName,
-				ParsedType: n.ParsedType, Server: n.Server, ServerPort: n.ServerPort,
-			})
-		}
-		byHost[n.ID] = len(hosts)
 		hosts = append(hosts, h)
-	}
-	for _, n := range nodes {
-		if n.Source == "" || n.HostID == "" {
-			continue
-		}
-		i, ok := byHost[n.HostID]
-		if !ok {
-			continue
-		}
-		child := byID[n.ID]
-		child.ID = n.ID
-		child.Name = n.Name
-		child.Source = n.Source
-		child.ParsedName = n.ParsedName
-		child.ParsedType = n.ParsedType
-		child.Server = n.Server
-		child.ServerPort = n.ServerPort
-		hosts[i].ParsedNodes = append(hosts[i].ParsedNodes, child)
-		hosts[i].addStats(child)
 	}
 	return hosts
 }

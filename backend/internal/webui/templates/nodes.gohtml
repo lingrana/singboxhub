@@ -41,18 +41,6 @@
       <span>累计 ↑ {{fmtBytes .TotalUpBytes}}</span>
       <span>累计 ↓ {{fmtBytes .TotalDownBytes}}</span>
     </div>
-    {{if .ParsedNodes}}
-    <div class="node-children">
-      <div class="muted mono">解析节点 ({{len .ParsedNodes}})</div>
-      {{range .ParsedNodes}}
-      <div class="node-child-row">
-        <b>{{if .Name}}{{.Name}}{{else}}{{.ParsedName}}{{end}}</b>
-        {{if .ParsedType}}<span class="tag">{{.ParsedType}}</span>{{end}}
-        {{if .Server}}<span class="mono muted">{{.Server}}:{{.ServerPort}}</span>{{end}}
-      </div>
-      {{end}}
-    </div>
-    {{end}}
     <div class="muted">最近在线:{{fmtAgo .LastOnlineAt}}{{if .HasOutbound}} · 已配出站{{end}}</div>
     <div class="actions">
       <button type="button" hx-post="/admin/nodes/{{.ID}}/check">检查</button>

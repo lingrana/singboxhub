@@ -1340,6 +1340,122 @@ span.nav-logo { display: inline-grid; place-items: center; font-family: var(--fo
   margin-top: 16px;
 }
 
+.subscription-node-list {
+  display: grid;
+  gap: 2px;
+  max-width: 760px;
+  border-top: 1px solid var(--border);
+}
+
+.subscription-node {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 64px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-solid);
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.subscription-node:hover {
+  background: var(--fg);
+  color: var(--bg);
+}
+
+.subscription-node-main {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 12px;
+}
+
+.subscription-node-status {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border: 1px solid var(--muted-fg);
+  border-radius: 50%;
+}
+
+.subscription-node-status.online {
+  background: var(--fg);
+  border-color: var(--fg);
+}
+
+.subscription-node:hover .subscription-node-status.online {
+  background: var(--bg);
+  border-color: var(--bg);
+}
+
+.subscription-node-copy {
+  min-width: 0;
+}
+
+.subscription-node-name {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 16px;
+}
+
+.subscription-node-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin-top: 5px;
+  color: var(--muted-fg);
+  font-size: 11px;
+  overflow: hidden;
+}
+
+.subscription-node-meta > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subscription-node:hover .subscription-node-meta {
+  color: var(--bg);
+}
+
+.subscription-node-meta .tag {
+  flex: 0 0 auto;
+}
+
+.subscription-node-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
+.subscription-node-action {
+  width: 36px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 16px;
+  background: var(--muted-bg);
+  color: var(--fg);
+  font-size: 18px;
+  line-height: 1;
+}
+
+.subscription-node-action:hover,
+.subscription-node:hover .subscription-node-action {
+  background: var(--bg);
+  color: var(--fg);
+}
+
+@media (max-width: 600px) {
+  .subscription-node { padding: 10px 8px; }
+  .subscription-node-name { font-size: 14px; }
+  .subscription-node-meta { max-width: 58vw; }
+}
+
 /* ==================== 设置 ==================== */
 
 .settings-page {
