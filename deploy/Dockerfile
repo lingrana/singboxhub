@@ -1,5 +1,5 @@
 # 单阶段构建:sing-box hub 面板(纯 Go,UI 模板嵌入仓库,无需前端工具链)
-FROM golang:1.25-alpine AS build
+FROM golang:1.26-alpine AS build
 WORKDIR /src
 COPY backend/go.mod backend/go.sum ./
 RUN go mod download
