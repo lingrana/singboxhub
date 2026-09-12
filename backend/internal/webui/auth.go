@@ -2,7 +2,6 @@ package webui
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net"
 	"net/http"
@@ -317,9 +316,9 @@ func (u *UI) handleLoginSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res := u.call(r, "", http.MethodPost, "/session", mustJSON(map[string]string{
+	res := u.apiSend(r, "", http.MethodPost, "/session", map[string]string{
 		"username": username, "password": password,
-	}), nil)
+	}, nil)
 	if res.Status != http.StatusCreated {
 		msg := res.ProblemDetail()
 		if res.Status == http.StatusUnauthorized {
@@ -396,15 +395,6 @@ func (u *UI) handleThemeToggle(w http.ResponseWriter, r *http.Request) {
 		target = "/"
 	}
 	http.Redirect(w, r, target, http.StatusSeeOther)
-}
-
-// mustJSON marshals v or panics; only used with statically-known shapes.
-func mustJSON(v any) []byte {
-	raw, err := json.Marshal(v)
-	if err != nil {
-		panic(err)
-	}
-	return raw
 }
 
 // isSafeRedirect checks that a redirect target is a safe relative path
